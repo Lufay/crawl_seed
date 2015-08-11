@@ -1,5 +1,5 @@
 import re, urllib2, sys, os, time, urllib, urlparse, argparse
-#import posixpath, 
+#import posixpath, urlparse
 from bs4 import BeautifulSoup
 from bs4 import element
 import trunk

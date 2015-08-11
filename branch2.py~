@@ -1,0 +1,108 @@
+import re, urllib2, sys, os, time, urllib, posixpath, urlparse
+from bs4 import BeautifulSoup
+from bs4 import element
+import trunk
+
+domain = 'http://cb.1024gc.org/bbs/'
+pathquery = 'forum-%d-%d.html'
+header = trunk.header
+fid_id = {'latest':3, 'wuma':5, 'qibing':22, 'zipai':21, 'sanji':18, 'oumei':7, 'weimei':14, 'toupai':15}
+
+page_pattern = re.compile(ur'\[\d{1,2}[-.]\d{1,2}\]')
+href_pattern = re.compile(ur'/freeone/file.php/')
+
+def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
+	url = "%s%s" % (domain, short_url)
+	content = trunk.open_page(url)
+	soup = BeautifulSoup(content)
+	sps = soup('span', class_='bold', text=page_pattern)
+	if len(sps) != 1:
+		logfile.write("Can't find the title!\n")
+		return
+	mc = sps[0].find_next_siblings('div')
+	if len(mc) != 1:
+		logfile.wrire("There's more than one div!")
+		return
+	dir_seq = 1
+	os.mkdir(str(dir_seq))
+	os.chdir(str(dir_seq))
+	for child in mc[0].descendants:
+		if isinstance(child, element.NavigableString):
+			logfile.write(child.encode('gbk'))
+		elif isinstance(child, element.Tag):
+			if child.name == 'br':
+				logfile.write('\n')
+			elif child.name == 'img':
+				trunk.download(child['src'], logfile=logfile)
+			elif child.name == 'a' and href_pattern.search(child['href']):
+				content = trunk.open_page(child['href'])
+				soup2 = BeautifulSoup(content)
+				form = soup2.find('form')
+				durl = urlparse.urljoin(child['href'], form['action'])
+				datas = form('input', {'type':'hidden'})
+				data = {}
+				for item in datas:
+					data[item['name']] = item['value'].encode('utf8')
+				postdata = urllib.urlencode(data)
+				print postdata, len(postdata)
+				hd = header.copy()
+				hd.update({
+					'Content-Type': 'application/x-www-form-urlencoded',
+					'Content-Length': len(postdata),
+					'Referer': str(child['href']),
+					})
+				fn = trunk.download(durl, postdata, hd, logfile=logfile)
+				logfile.write('Write the file %s\n' % fn)
+				dir_seq += 1
+				os.chdir('..')
+				os.mkdir(str(dir_seq))
+				os.chdir(str(dir_seq))
+		else:
+			logfile.write('child type error!!!')
+	os.chdir('..')
+	os.rmdir(str(dir_seq))
+	return
+	for dpage in soup('a', href=href_pattern):
+		content = trunk.open_page(dpage['href'])
+		soup2 = BeautifulSoup(content)
+		form = soup2.find('form')
+#		durl = posixpath.normpath(posixpath.join(posixpath.dirname(dpage['href']), form['action']))
+		durl = urlparse.urljoin(dpage['href'], form['action'])
+		datas = form('input', {'type':'hidden'})
+		data = {}
+		for item in datas:
+			data[item['name']] = item['value'].encode('utf8')
+		postdata = urllib.urlencode(data)
+		print postdata, len(postdata)
+		hd = header.copy()
+		hd.update({
+			'Content-Type': 'application/x-www-form-urlencoded',
+			'Content-Length': len(postdata),
+			'Referer': str(dpage['href']),
+			})
+		trunk.download(durl, postdata, hd, logfile=logfile)
+		break
+
+def crawl_content(content, clf=sys.stdout):
+	soup = BeautifulSoup(content)
+	for a in reversed(soup('a', style=None, text=page_pattern)):
+		clf.write(a.encode('gbk') + '\n')
+#		now = str(time.time())
+#		os.mkdir(now)
+#		os.chdir(now)
+		crawl_subject(a['href'], logfile=clf)
+#		os.chdir('..')
+		break
+
+def crawl_page(page_id=1, clf=sys.stdout):
+	content = trunk.open_page(domain + pathquery % (fid_id['latest'], page_id))
+	crawl_content(content, clf)
+
+
+if __name__ == "__main__":
+	if not os.path.isdir('1024he'):
+		os.mkdir('1024he')
+	os.chdir('1024he')
+	f = open('temp.log', 'w')
+	crawl_page(clf=f)
+	f.close()

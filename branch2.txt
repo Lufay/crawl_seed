@@ -1,0 +1,17 @@
+bs4.element.NavigableString
+直接显示
+
+bs4.element.Tag
+
+br
+转换为\n
+
+a
+只接受下载
+记录下下载的文件名
+
+img
+下载src
+按a序分目录存储
+
+

@@ -24,5 +24,6 @@ ver3.1
 1. 完善page_pattern
 2. 对open_page返回None的检查
 
-ver3.2
-1.重构load_log为类，强化复用
+ver3.2(trunk)
+1.重构load_log为类HasDownloadLog，强化复用
+2.修改download函数的返回值为(bool, "info"), 和crawl_subject相一致

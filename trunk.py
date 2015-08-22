@@ -23,7 +23,8 @@ redire_pattern = re.compile(ur'url=(.*)$')
 filename_pattern = re.compile(ur'filename="(.*)"')
 
 def open_page(url):
-	'''Open a page with url, if fail to retry 100 times'''
+	'''Open a page with url, if fail to retry 100 times,
+    return:content or None'''
 	req = urllib2.Request(url, headers=header)
 	for _ in xrange(100):
 		try:
@@ -40,11 +41,15 @@ def open_page(url):
 
 def download(url, postdata=None, headers=header, filename=None, logfile=sys.stderr):
 	'''Download a resource from url which will be named filename,
-	if fail to retry 10 times'''
+	if fail to retry 10 times,
+    if existed return False, "Existed",
+    if content is unmatched return False, "Not Found",
+    success return True, filename,
+    retry failed return False, "Retry Failed".'''
 	if not filename and not postdata:
 		filename = os.path.basename(url)
 		if os.path.exists(filename):
-			return "existed"
+			return False, "Existed"
 	req = urllib2.Request(url, postdata, headers)
 	for _ in xrange(1, 11):
 		logfile.write("Download from:\n%s\n" % url.encode('gbk'))
@@ -56,12 +61,12 @@ def download(url, postdata=None, headers=header, filename=None, logfile=sys.stde
 					filename = filename_pattern.search(cnt_dp).group(1)
 				else:
 					logfile.write(res.read())
-					return "Not Found"
+					return False, "Not Found"
 			logfile.write("Success\n\n")
 			with open(filename, 'wb') as f:
 				f.write(res.read())
 			res.close()
-			return filename
+			return True, filename
 		except urllib2.HTTPError, e:
 			logfile.write("%s\n\n" % e.reason)
 		except urllib2.URLError, e:
@@ -69,6 +74,7 @@ def download(url, postdata=None, headers=header, filename=None, logfile=sys.stde
 		except Exception, e:
 			logfile.write("Caght a unknown except!\n")
 		time.sleep(_ * (1 if postdata else 0.3))
+    return False, "Retry Failed"
 
 def fill_in_post_data(sp, data):
 	'''Construct a str fit to multipart/form-data
@@ -123,7 +129,7 @@ class HasDownloadLog:
 		self.f.close()
 	def has_download(self, short_url):
 		return short_url in self.hdu
-	def new_download(self, short_url, dirname):
+	def add_download(self, short_url, dirname):
 		self.hdu[short_url] = dirname
 
 def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
@@ -138,7 +144,7 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 	soup_subject = BeautifulSoup(content, from_encoding='gbk')
 	if with_jpg:
 		for img in soup_subject('img', src=re.compile(r'\.jpg$')):
-			if download(img['src'], logfile=logfile) == 'existed':
+			if download(img['src'], logfile=logfile) == (False, 'Existed'):
 				break
 	dla = soup_subject('a', text=download_pattern)
 	if len(dla) == 0:	# there isn't download link
@@ -197,7 +203,7 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
 		'Content-Length': len(post_data)
 		})
-	return True, download(url, post_data, hd, logfile=logfile)
+	return download(url, post_data, hd, logfile=logfile)
 
 def crawl_content(content, clf=sys.stdout):
 	'''Crawl a forum page with its content,
@@ -228,7 +234,7 @@ def crawl_content(content, clf=sys.stdout):
 			logfile.write("\n")
 			res_tuple = crawl_subject(sub_url, logfile=logfile)
 			if res_tuple[0]:
-				clf.new_download(sub_url, now)
+				clf.add_download(sub_url, now)
 				clf.write([sub_url, encode_title, now])
 			else:
 				clf.write([res_tuple[1], sub_url, encode_title, now])

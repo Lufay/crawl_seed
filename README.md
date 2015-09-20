@@ -27,3 +27,7 @@ ver3.1
 ver3.2(trunk)
 1.重构load_log为类HasDownloadLog，强化复用
 2.修改download函数的返回值为(bool, "info"), 和crawl_subject相一致
+3.增加GetFileLine的类（为checklog.py服务，后者可以合并到trunk）
+4.download函数增加内容检查机制
+5.增加not_refresh的内容检查函数，如果是Refresh，则重试15次（貌似那么好用）
+6.兼容mosaic和occident页面抓取

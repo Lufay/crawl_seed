@@ -1,11 +1,11 @@
 import re, urllib2, sys, os, time, datetime, argparse
 from bs4 import BeautifulSoup
 
-domain = 'http://dz.clcl.biz/'
-#domain = 'http://dz.phonc.com/'
-#domain = 'http://cl.clcl.biz/'
-#domain = 'http://dz.1024pp.com/'
-#domain = 'http://me.cldz.me/'
+domain = 'http://cl.tuiaa.com/'
+#domain = 'http://cl.opiu.org/'
+#domain = 'http://cl.hkcl.pw/'
+#domain = 'http://cl.opiu.org/'
+#domain = 'http://cl.tuiaa.com/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -22,6 +22,33 @@ text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?has
 redire_pattern = re.compile(ur'url=(.*)$')
 filename_pattern = re.compile(ur'filename="(.*)"')
 
+class GetFileLine:
+	def __init__(self, f, line_block=128):
+		'''f must support seek/tell, readlines, iterator'''
+		self.f = f
+		self.lb = line_block
+	def get_first(self):
+		ori_pos = self.f.tell()
+		self.f.seek(0)
+		for line in self.f:
+			line = line.strip()
+			if line:
+				self.f.seek(ori_pos)
+				return line
+	def get_last(self):
+		ori_pos = self.f.tell()
+		line_size = -self.lb
+		while line_size > -4096:
+			self.f.seek(line_size, 2)
+			line_size -= self.lb
+			lines = self.f.readlines()
+			if len(lines) > 1:
+				for line in reversed(lines):
+					line = line.strip()
+					if line:
+						self.f.seek(ori_pos)
+						return line
+
 def open_page(url):
 	'''Open a page with url, if fail to retry 100 times,
     return:content or None'''
@@ -30,7 +57,7 @@ def open_page(url):
 		try:
 			print 'Openning URL:'
 			print url
-			res = urllib2.urlopen(req) #, timeout=10
+			res = urllib2.urlopen(req, timeout=15)
 			content = res.read()
 			res.close()
 			print 'Success\n'
@@ -39,7 +66,7 @@ def open_page(url):
 			print "open failed"
 			time.sleep(1)
 
-def download(url, postdata=None, headers=header, filename=None, logfile=sys.stderr):
+def download(url, postdata=None, headers=header, filename=None, check=None, logfile=sys.stderr):
 	'''Download a resource from url which will be named filename,
 	if fail to retry 10 times,
     if existed return False, "Existed",
@@ -55,16 +82,22 @@ def download(url, postdata=None, headers=header, filename=None, logfile=sys.stde
 		logfile.write("Download from:\n%s\n" % url.encode('gbk'))
 		try:
 			res = urllib2.urlopen(req, timeout=30)
+			content = res.read()
+			if check:
+				check_res = check(content)
+				if not check_res[0]:
+					logfile.write('Checked fail: %s\n' % check_res[1])
+					return check_res
 			if postdata:
 				cnt_dp = res.info().get('Content-Disposition')
 				if cnt_dp:
 					filename = filename_pattern.search(cnt_dp).group(1)
 				else:
-					logfile.write(res.read())
+					logfile.write("Can't find file name!\nRet code: %d\nURL info:\n%s\nContent:\n%s\n" % (res.getcode(), res.info(), content))
 					return False, "Not Found"
 			logfile.write("Success\n\n")
 			with open(filename, 'wb') as f:
-				f.write(res.read())
+				f.write(content)
 			res.close()
 			return True, filename
 		except urllib2.HTTPError, e:
@@ -72,6 +105,7 @@ def download(url, postdata=None, headers=header, filename=None, logfile=sys.stde
 		except urllib2.URLError, e:
 			logfile.write("%s\n\n" % e)
 		except Exception, e:
+			logfile.write("Exception message: %s\n" % e.message)
 			logfile.write("Caght a unknown except!\n")
 		time.sleep(_ * (1 if postdata else 0.3))
 	return False, "Retry Failed"
@@ -132,6 +166,11 @@ class HasDownloadLog:
 	def add_download(self, short_url, dirname):
 		self.hdu[short_url] = dirname
 
+def not_refresh(content):
+	if content.strip().startswith('Refresh this page'):
+		return False, 'Refresh this page'
+	return True, ''
+
 def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 	'''Crawl a topic page with domain + short_url,
 	the aim is to crawl img and find torrent download link,
@@ -143,9 +182,13 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		return False, "Open Page Failed"
 	soup_subject = BeautifulSoup(content, from_encoding='gbk')
 	if with_jpg:
+		print 'Download img ',
 		for img in soup_subject('img', src=re.compile(r'\.jpg$')):
 			if download(img['src'], logfile=logfile) == (False, 'Existed'):
 				break
+			else:
+				print '.',
+		print
 	dla = soup_subject('a', text=download_pattern)
 	if len(dla) == 0:	# there isn't download link
 		dla = soup_subject('a', href=download_pattern)
@@ -203,7 +246,14 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
 		'Content-Length': len(post_data)
 		})
-	return download(url, post_data, hd, logfile=logfile)
+	for _ in xrange(15):
+		res = download(url, post_data, hd, check=not_refresh, logfile=logfile)
+		if res != (False, "Refresh this page"):
+			break
+		time.sleep(2)
+	return res
+
+
 
 def crawl_content(content, clf=sys.stdout):
 	'''Crawl a forum page with its content,
@@ -227,7 +277,7 @@ def crawl_content(content, clf=sys.stdout):
 			now = str(time.time())
 			os.mkdir(now)
 			os.chdir(now)
-			logfile = open('index.log', 'w')
+			logfile = open('index.log', 'w+')
 			logfile.write("%s\n" % sub_url)
 			logfile.write("%s\n" % encode_title)
 			logfile.write("%s\n" % citime)
@@ -271,16 +321,18 @@ def main():
 	parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.0')
 	parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store')
 	parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
-	parser.add_argument('-m', '--mosaic', action='store_true', help='Which kind of torrent you will download')
+	parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident'], help='Which kind of torrent you will download')
 	parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')
 	arg = parser.parse_args()
 	workpath = arg.path+'/work'
 	if not os.path.isdir(workpath):
 		os.makedirs(workpath)
 	os.chdir(workpath)
-	if arg.mosaic:
-		global pathquery
+	global pathquery
+	if arg.which == 'm' or arg.which == 'mosaic':
 		pathquery = pathquery.replace('2', '15')
+	elif arg.which == 'o' or arg.which == 'occident':
+		pathquery = pathquery.replace('2', '4')
 	clf = HasDownloadLog('index.log', 'htm_data/')
 	page_range = []
 	page_cache = {}

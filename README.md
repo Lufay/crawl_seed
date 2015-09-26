@@ -31,3 +31,5 @@ ver3.2(trunk)
 4.download函数增加内容检查机制
 5.增加not_refresh的内容检查函数，如果是Refresh，则重试15次（貌似那么好用）
 6.兼容mosaic和occident页面抓取
+7.增加gen_boundary函数生成form-data的分割字符串
+8.解决Refresh this page的问题（发现并到rmd下载页重试下载）

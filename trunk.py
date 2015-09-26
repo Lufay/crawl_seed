@@ -1,4 +1,4 @@
-import re, urllib2, sys, os, time, datetime, argparse
+import re, urllib2, sys, os, time, datetime, argparse, string, random
 from bs4 import BeautifulSoup
 
 domain = 'http://cl.tuiaa.com/'
@@ -35,19 +35,24 @@ class GetFileLine:
 			if line:
 				self.f.seek(ori_pos)
 				return line
+		return ""
 	def get_last(self):
 		ori_pos = self.f.tell()
 		line_size = -self.lb
-		while line_size > -4096:
-			self.f.seek(line_size, 2)
-			line_size -= self.lb
-			lines = self.f.readlines()
-			if len(lines) > 1:
-				for line in reversed(lines):
-					line = line.strip()
-					if line:
-						self.f.seek(ori_pos)
-						return line
+		try:
+			while line_size > -4096:
+				self.f.seek(line_size, 2)
+				line_size -= self.lb
+				lines = self.f.readlines()
+				if len(lines) > 1:
+					for line in reversed(lines):
+						line = line.strip()
+						if line:
+							self.f.seek(ori_pos)
+							return line
+		except IOError, e:
+			print "IOError: [errno: %d] %s\n" % (e.errno, e.strerror)
+			return ""
 
 def open_page(url):
 	'''Open a page with url, if fail to retry 100 times,
@@ -87,13 +92,19 @@ def download(url, postdata=None, headers=header, filename=None, check=None, logf
 				check_res = check(content)
 				if not check_res[0]:
 					logfile.write('Checked fail: %s\n' % check_res[1])
+					logfile.write("Ret code: %d\n" % res.getcode())
+					logfile.write("URL info:\n%s\n" % res.info())
+					logfile.write('Content:\n%s\n' % content)
 					return check_res
 			if postdata:
 				cnt_dp = res.info().get('Content-Disposition')
 				if cnt_dp:
 					filename = filename_pattern.search(cnt_dp).group(1)
 				else:
-					logfile.write("Can't find file name!\nRet code: %d\nURL info:\n%s\nContent:\n%s\n" % (res.getcode(), res.info(), content))
+					logfile.write("Can't find file name!\n")
+					logfile.write("Ret code: %d\n" % res.getcode())
+					logfile.write("URL info:\n%s\n" % res.info())
+					logfile.write("Content:\n%s\n" % content)
 					return False, "Not Found"
 			logfile.write("Success\n\n")
 			with open(filename, 'wb') as f:
@@ -109,6 +120,9 @@ def download(url, postdata=None, headers=header, filename=None, check=None, logf
 			logfile.write("Caght a unknown except!\n")
 		time.sleep(_ * (1 if postdata else 0.3))
 	return False, "Retry Failed"
+
+def gen_boundary():
+	return '----WebKitFormBoundary' + ''.join(random.sample(string.ascii_letters+string.digits, 16))
 
 def fill_in_post_data(sp, data):
 	'''Construct a str fit to multipart/form-data
@@ -228,28 +242,39 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		logfile.write("Download retry Failed\n\n")
 		return False, "Download retry Failed"
 	# open the jump path
-	content = open_page(url)
-	if not content:
-		logfile.write('Error: open page %s failed\n' % url)
-		return False, "Open Page Failed"
-	soup_j = BeautifulSoup(content)
-	form_tag = soup_j.find('form')
-	url = '%s/%s' % (os.path.dirname(url), form_tag['action'])
-#	use html5lib form is not the parent of table
-#	input_tags = form_tag('input')
-	input_tags = soup_j.find('td', align='center')('input')
-	form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
-	boundary='aejfmvo'
-	post_data = fill_in_post_data(boundary, form_data)
-	hd = header.copy()
-	hd.update({
-		'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
-		'Content-Length': len(post_data)
+	for _ in xrange(10):
+		content = open_page(url)
+		if not content:
+			logfile.write('Error: open page %s failed\n' % url)
+			res = (False, "Open Page Failed")
+			continue
+		soup_j = BeautifulSoup(content)
+		form_tag = soup_j.find('form')
+		if not form_tag:
+			logfile.write('Error: can\'t find form tag at %s\n' % url)
+			logfile.write('Content:\n%s\n' % content)
+			res = (False, "Not Form Tag")
+			continue
+		dwn_url = '%s/%s' % (os.path.dirname(url), form_tag['action'])
+	#	use html5lib form is not the parent of table
+	#	input_tags = form_tag('input')
+		input_tags = soup_j.find('td', align='center')('input')
+		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
+		boundary = gen_boundary()
+		post_data = fill_in_post_data(boundary, form_data)
+		hd = header.copy()
+		hd.update({
+			'Cache-Control': 'max-age=0',
+			'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
+			'Content-Length': len(post_data)
 		})
-	for _ in xrange(15):
-		res = download(url, post_data, hd, check=not_refresh, logfile=logfile)
+		res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
 		if res != (False, "Refresh this page"):
 			break
+		else:
+			hash_code = url.split('=', 2)[1]
+			# the const str of addr is from refresh page hit, so it can be extracted from that page
+			url = 'http://www.rmdown.com/link.php?hash=' + hash_code
 		time.sleep(2)
 	return res
 
@@ -319,7 +344,7 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout):
 def main():
 	parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
 	parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.0')
-	parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store')
+	parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store[default: E:\crawl]')
 	parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
 	parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident'], help='Which kind of torrent you will download')
 	parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')

@@ -33,3 +33,4 @@ ver3.2(trunk)
 6.兼容mosaic和occident页面抓取
 7.增加gen_boundary函数生成form-data的分割字符串
 8.解决Refresh this page的问题（发现并到rmd下载页重试下载）
+9.增加HasDownloadLog加载日志文件时，对下载失败重新下载的功能（读完整个文件，重新下载失败记录）

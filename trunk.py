@@ -152,15 +152,44 @@ class HasDownloadLog:
 	'''Load a log file which record which short_url saved in which directory,
 	so, this class will initial the has_download_url dict,
 	and provide write logfile interface'''
-	def __init__(self, filename, succ_prefix, log_sp='--+-+--', has_download_url = {}):
+	def __init__(self, filename, succ_prefix, log_sp='--+-+--', has_download_url = {}, ignore_failed=True):
 		self.sp = log_sp
 		self.hdu = has_download_url
 		if os.path.exists(filename):
 			self.f = open(filename, 'r+')
+			failed_list = []
 			for line in self.f:
 				if line.startswith(succ_prefix):
 					url = line[:line.find(log_sp)]
 					self.hdu[url] = line[line.rfind(log_sp)+len(log_sp):]
+				elif not ignore_failed:
+					failed_list.append(line)
+			else:
+				for fail_line in failed_list:
+					try:
+						fail_info, url, title, dirname = fail_line.split(log_sp)
+					except ValueError, e:
+						print "Load log: Can't interpret line %r" % line
+					else:
+						if not url in self.hdu:
+							dirname = dirname.strip()
+							dir_not_exist = not dirname in os.listdir('.')
+							if dir_not_exist:
+								os.mkdir(dirname)
+								logfile = open(dirname + '/index.log', 'w+')
+								logfile.write("%s\n" % url)
+								logfile.write("%s\n" % title)
+								logfile.write("\n")
+								logfile.close()
+							os.chdir(dirname)
+							logfile = open('index.log', 'a')
+							logfile.write('\nRedownload\n')
+							if crawl_subject(url, dir_not_exist, logfile)[0]:
+								self.hdu[url] = dirname
+								self.f.write(fail_line[fail_line.find(succ_prefix):])
+							logfile.write("\n")
+							logfile.close()
+							os.chdir('..')
 		else:
 			self.f = open(filename, 'w+')
 	def write(self, content):
@@ -208,7 +237,7 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		dla = soup_subject('a', href=download_pattern)
 		if len(dla) == 0:
 			for s in soup_subject.body.strings:
-				m = text_download_pattern.match(s.encode('gb18030'))
+				m = text_download_pattern.search(s.encode('gb18030'))
 				if m:
 					dla.append({'href':m.group()})
 			if len(dla) == 0:
@@ -345,8 +374,9 @@ def main():
 	parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
 	parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.0')
 	parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store[default: E:\crawl]')
-	parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
 	parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident'], help='Which kind of torrent you will download')
+	parser.add_argument('-r', '--redownload', action='store_false', help='Whether redownload the subject which is failed')
+	parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
 	parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')
 	arg = parser.parse_args()
 	workpath = arg.path+'/work'
@@ -358,7 +388,7 @@ def main():
 		pathquery = pathquery.replace('2', '15')
 	elif arg.which == 'o' or arg.which == 'occident':
 		pathquery = pathquery.replace('2', '4')
-	clf = HasDownloadLog('index.log', 'htm_data/')
+	clf = HasDownloadLog('index.log', 'htm_data/', ignore_failed=arg.redownload)
 	page_range = []
 	page_cache = {}
 	if len(arg.page) == 2:

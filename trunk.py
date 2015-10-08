@@ -73,11 +73,11 @@ def open_page(url):
 
 def download(url, postdata=None, headers=header, filename=None, check=None, logfile=sys.stderr):
 	'''Download a resource from url which will be named filename,
-	if fail to retry 10 times,
+	if fail to retry 10 times, retry failed return False, "Retry Failed"
     if existed return False, "Existed",
-    if content is unmatched return False, "Not Found",
-    success return True, filename,
-    retry failed return False, "Retry Failed".'''
+    if can't find Content-Disposition return False, "Not Found",
+    if check fail return the check function's ret val,
+    success return True, filename.'''
 	if not filename and not postdata:
 		filename = os.path.basename(url)
 		if os.path.exists(filename):
@@ -119,7 +119,7 @@ def download(url, postdata=None, headers=header, filename=None, check=None, logf
 			logfile.write("Exception message: %s\n" % e.message)
 			logfile.write("Caght a unknown except!\n")
 		time.sleep(_ * (1 if postdata else 0.3))
-	return False, "Retry Failed"
+	return False, "Download Retry Failed"
 
 def gen_boundary():
 	return '----WebKitFormBoundary' + ''.join(random.sample(string.ascii_letters+string.digits, 16))
@@ -149,7 +149,7 @@ download
 	return ''.join(res)
 
 class HasDownloadLog:
-	'''Load a log file which record which short_url saved in which directory,
+	'''Load a log file which record which short_url saved in which directory, redownload the failed short_url if ignore_failed is False,
 	so, this class will initial the has_download_url dict,
 	and provide write logfile interface'''
 	def __init__(self, filename, succ_prefix, log_sp='--+-+--', has_download_url = {}, ignore_failed=True):
@@ -210,6 +210,8 @@ class HasDownloadLog:
 		self.hdu[short_url] = dirname
 
 def not_refresh(content):
+	'''A check function,
+	ret val must be bool, "info".'''
 	if content.strip().startswith('Refresh this page'):
 		return False, 'Refresh this page'
 	return True, ''
@@ -268,8 +270,8 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		else:
 			logfile.write('Url not matched\n\n')
 	else:
-		logfile.write("Download retry Failed\n\n")
-		return False, "Download retry Failed"
+		logfile.write("No matched download url\n\n")
+		return False, "No matched download url"
 	# open the jump path
 	for _ in xrange(10):
 		content = open_page(url)
@@ -282,7 +284,7 @@ def crawl_subject(short_url, with_jpg=True, logfile=sys.stdout):
 		if not form_tag:
 			logfile.write('Error: can\'t find form tag at %s\n' % url)
 			logfile.write('Content:\n%s\n' % content)
-			res = (False, "Not Form Tag")
+			res = (False, "No Form Tag")
 			continue
 		dwn_url = '%s/%s' % (os.path.dirname(url), form_tag['action'])
 	#	use html5lib form is not the parent of table
@@ -372,7 +374,7 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout):
 
 def main():
 	parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
-	parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.0')
+	parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.2')
 	parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store[default: E:\crawl]')
 	parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident'], help='Which kind of torrent you will download')
 	parser.add_argument('-r', '--redownload', action='store_false', help='Whether redownload the subject which is failed')

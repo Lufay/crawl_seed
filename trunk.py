@@ -200,7 +200,9 @@ class HasDownloadLog:
 					else:
 						#print "Load log: Can't interpret line %r" % line
 						print "Load log: Can't interpret line '%s'" % line
-			else:
+			if not ignore_failed:
+				today = datetime.datetime.today()
+				self.write('\n%s redownload %d failed\n' % (today, len(failed_list)))
 				for fail_info, url, title, dirname in failed_list:
 					if not url in self.hdu:
 						dir_not_exist = not dirname in os.listdir('.')
@@ -249,6 +251,19 @@ def not_refresh(content):
 		return False, 'Refresh this page'
 	return True, ''
 
+def download_img(soup, num, img_suffix='jpg', logfile=sys.stdout):
+	if num > 0:
+		print 'Download img ',
+		for img in soup('img', src=re.compile(r'\.%s$' % img_suffix)):
+			if download(img['src'], logfile=logfile) == (False, 'Existed'):
+				break
+			else:
+				print '.',
+				num -= 1
+				if not num:
+					break
+		print
+
 def download_seed(url, logfile=sys.stdout, retry=5):
 	'''download seed from hash page
 	'''
@@ -278,7 +293,7 @@ def download_seed(url, logfile=sys.stdout, retry=5):
 			'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
 			'Content-Length': len(post_data)
 		})
-		res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
+		res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=retry)
 		if res != (False, "Refresh this page"):
 			break
 		else:
@@ -307,17 +322,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 			if not url.startswith(domain):
 				logfile.write('Error: url not matched: %s\n' % url)
 				return False, "Url not matched"
-	if num_jpg > 0:
-		print 'Download img ',
-		for img in soup_subject('img', src=re.compile(r'\.jpg$')):
-			if download(img['src'], logfile=logfile) == (False, 'Existed'):
-				break
-			else:
-				print '.',
-				num_jpg -= 1
-				if not num_jpg:
-					break
-		print
+	download_img(soup_subject, num_jpg, logfile=logfile)
 	dla = soup_subject('a', text=download_pattern)
 	if len(dla) == 0:	# there isn't download link
 		dla = soup_subject('a', href=download_pattern)

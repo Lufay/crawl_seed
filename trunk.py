@@ -1,10 +1,8 @@
 import re, urllib2, sys, os, time, datetime, argparse, string, random
 from bs4 import BeautifulSoup
 
-domain = 'http://dc.addcl.xyz/'
-#domain = 'http://cl.coocloo.co/'
-#domain = 'http://cl.mocl.info/'
-#domain = 'http://cl.tycl.rocks/'
+domain = 'http://c6.l5j.biz/'
+#domain = 'http://dz.jd4.biz/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -109,7 +107,7 @@ def download(url, postdata=None, headers=header, filename=None, check=None, logf
 			return False, "Existed"
 	req = urllib2.Request(url, postdata, headers)
 	for _ in xrange(1, retry+1):
-		logfile.write("Download from:\n%s\n" % url.replace(u'\xa0', u' ').encode('gbk'))
+		logfile.write("Download from:\n%s\n" % url.encode('cp1252', errors='ignore'))  #gbk
 		try:
 			res = urllib2.urlopen(req, timeout=30 if postdata else 10)
 			content = res.read()
@@ -193,7 +191,9 @@ class HasDownloadLog:
 					fail_snips = line.strip().split(log_sp)
 					if len(fail_snips) == 4:
 						fail_info = fail_snips[0]
-						if fail_info == 'Download Retry Failed':
+						if fail_info == 'Download Retry Failed' or \
+						   fail_info == 'Open Page Failed' or \
+						   fail_info == 'Can\'t open download link':
 							failed_list.append(fail_snips);
 						else:
 							print "Load log: ignore fail_info %s" % fail_info
@@ -203,9 +203,10 @@ class HasDownloadLog:
 			if not ignore_failed:
 				today = datetime.datetime.today()
 				self.write('\n%s redownload %d failed\n' % (today, len(failed_list)))
+				cur_dir_list = os.listdir('.')
 				for fail_info, url, title, dirname in failed_list:
 					if not url in self.hdu:
-						dir_not_exist = not dirname in os.listdir('.')
+						dir_not_exist = not dirname in cur_dir_list
 						if dir_not_exist:
 							os.mkdir(dirname)
 							logfile = open(dirname + '/index.log', 'w+')
@@ -264,11 +265,15 @@ def download_img(soup, num, img_suffix='jpg', logfile=sys.stdout):
 					break
 		print
 
-def download_seed(url, logfile=sys.stdout, retry=5):
+def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
 	'''download seed from hash page
 	'''
 	for _ in xrange(retry):
-		content = open_page(url)
+		content = ''
+		if open_page_retry > 0:
+			content = open_page(url, open_page_retry)
+		else:
+			content = open_page(url)
 		if not content:
 			logfile.write('Error: open page %s failed\n' % url)
 			res = (False, "Open Page Failed")
@@ -293,7 +298,11 @@ def download_seed(url, logfile=sys.stdout, retry=5):
 			'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
 			'Content-Length': len(post_data)
 		})
-		res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=retry)
+		res = None
+		if download_retry > 0:
+			res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=download_retry)
+		else:
+			res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
 		if res != (False, "Refresh this page"):
 			break
 		else:
@@ -318,10 +327,13 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 		if page_pattern.match(title):
 			break
 		else:
-			url = soup_subject('a')[-1]['href']
-			if not url.startswith(domain):
-				logfile.write('Error: url not matched: %s\n' % url)
-				return False, "Url not matched"
+			with open('dump.html', 'wb') as dump_file:
+				dump_file.write(content)
+			return False, "Check title failed"
+			#url = soup_subject('a')[-1]['href']
+			#if not url.startswith(domain):
+			#	logfile.write('Error: url not matched: %s\n' % url)
+			#	return False, "Url not matched"
 	download_img(soup_subject, num_jpg, logfile=logfile)
 	dla = soup_subject('a', text=download_pattern)
 	if len(dla) == 0:	# there isn't download link
@@ -339,7 +351,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	# open download link
 	for da in dla:
 		url = da['href']
-		logfile.write('%s\n' % url.replace(u'\xa0', u' '))
+		logfile.write('%s\n' % url.encode('cp1252', errors='ignore'))
 		content = open_page(url)
 		if not content:
 			logfile.write("Can't open download link\n\n")
@@ -365,12 +377,12 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	return download_seed(url, logfile)
 
 
-def crawl_content(content, clf=sys.stdout):
+def crawl_content(content, clf=sys.stdout, max_retry=12):
 	'''Crawl a forum page with its content,
 	clf for common log of all'''
 	if not content:
 		clf.write('Error: crawl None content!!\n')
-		return
+		return False
 	# install html5lib can avoid &# bug, what's more, from_encoding can be omitted
 	soup = BeautifulSoup(content, from_encoding='gbk')   #gb2312
 	# find subjects in the navigation page
@@ -379,7 +391,7 @@ def crawl_content(content, clf=sys.stdout):
 		sub_url = str(a['href'])
 		title_td = a.parent.next_sibling
 		title = unicode(title_td.h3.string)
-		encode_title = str(title.encode('gb18030'))  #gb18030 is super set of gbk, so that can avoid some encode error
+		encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
 		if page_pattern.match(title):
 			if clf.has_download(sub_url):
 				continue
@@ -392,12 +404,19 @@ def crawl_content(content, clf=sys.stdout):
 			logfile.write("%s\n" % encode_title)
 			logfile.write("%s\n" % citime)
 			logfile.write("\n")
-			res_tuple = crawl_subject(sub_url, logfile=logfile)
-			if res_tuple[0]:
-				clf.add_download(sub_url, now)
-				clf.write([sub_url, encode_title, now])
+			for _ in xrange(max_retry):
+				res_tuple = crawl_subject(sub_url, logfile=logfile)
+				if res_tuple[0]:
+					clf.add_download(sub_url, now)
+					clf.write([sub_url, encode_title, now])
+					break
+				elif res_tuple[1] == "Open Page Failed":
+					time.sleep(_+0.5)
+				else:
+					clf.write([res_tuple[1], sub_url, encode_title, now])
+					break
 			else:
-				clf.write([res_tuple[1], sub_url, encode_title, now])
+				clf.write(["Open Page Failed", sub_url, encode_title, now])
 			clf.write("\n")
 			logfile.close()
 			os.chdir('..')
@@ -406,8 +425,9 @@ def crawl_content(content, clf=sys.stdout):
 			clf.write("\n")
 		clf.flush()
 	clf.write('\n')
+	return True
 
-def crawl_page(page_id=1, page_cache={}, clf=sys.stdout):
+def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
 	'''Crawl a forum page with domain + querystr + page_id,
 	it will crawl page_id cache content first,
 	then crawl page_id current page and cache the page before it,
@@ -419,12 +439,16 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout):
 		crawl_content(page_cache[page_id], clf)  # update the has_download_url
 		del page_cache[page_id]
 	url = "%s%s%d" % (domain, pathquery, page_id)
-	content = open_page(url)
-	if page_cache and page_id != 1:
-		url = "%s%s%d" % (domain, pathquery, page_id-1)
-		page_cache[page_id-1] = open_page(url)
-	clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
-	crawl_content(content, clf)
+	for _ in xrange(max_retry):
+		content = open_page(url)
+		if page_cache and page_id != 1:
+			url = "%s%s%d" % (domain, pathquery, page_id-1)
+			page_cache[page_id-1] = open_page(url)
+		clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
+		if crawl_content(content, clf):
+			break
+		else:
+			time.sleep(_+0.5)
 
 def main():
 	parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')

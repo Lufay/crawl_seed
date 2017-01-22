@@ -4,12 +4,31 @@ import os, time
 from bs4 import BeautifulSoup
 import trunk
 
-#eginID = 835030
-#ndID = 838261
-#beginID = 840857
-#endID = 840868
-beginID = 843439
-endID = 845261
+#template_sub_url = 'htm_data/2/1605/1%d.html'
+#beginID = 943548
+#endID = 943548
+template_sub_url = 'htm_data/15/1605/1%d.html'
+beginID = 945177
+endID = 945883
+#beginID = 946558
+#endID = 946563
+#beginID = 947102
+#endID = 948213
+#beginID = 950277
+#endID = 950278
+#beginID = 951213
+#endID = 951215
+#beginID = htm_data/15/1606/1953637.html
+#endID = htm_data/15/1606/1955901.html
+#beginID = htm_data/15/1606/1956589.html
+#endID = htm_data/15/1606/1956610.html
+#beginID = htm_data/15/1606/1956907.html
+#endID = htm_data/15/1606/1958373.html
+#beginID = htm_data/15/1606/1958957.html
+#endID = htm_data/15/1606/1958974.html
+#beginID = htm_data/15/1606/1959767.html
+#endID = htm_data/15/1606/1960015.html
+
 
 
 title_end = u'  草榴社區  - powered by phpwind.net'
@@ -20,7 +39,7 @@ if not os.path.isdir(tmp_path):
 os.chdir(tmp_path)
 clf = trunk.HasDownloadLog('index.log', ignore_failed=False)
 for id in xrange(beginID, endID):
-	sub_url = 'htm_data/2/1602/1%d.html' % id
+	sub_url = template_sub_url % id
 	url = trunk.domain + sub_url
 	content = trunk.open_page(url, 4)
 	if not content:
@@ -30,7 +49,7 @@ for id in xrange(beginID, endID):
 	title = unicode(soup.title.string)
 	title_end_pos = title.find(title_end)
 	title = title[:title_end_pos]
-	encode_title = str(title.encode('gb18030'))
+	encode_title = title.encode('gb18030')
 
 	now = str(time.time())
 	os.mkdir(now)

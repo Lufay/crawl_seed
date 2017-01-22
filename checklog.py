@@ -146,7 +146,7 @@ def check_dirs(check_root, start_timestamp, end_timestamp, logfile_name=''):
 				dir_timestamp = float(dir_name)
 			except ValueError:
 				continue
-			if dir_timestamp + 1 >= start_timestamp/10000 and \
+			if dir_timestamp + 1 > start_timestamp/10000 and \
 			   dir_timestamp < end_timestamp/10000:
 				os.chdir(dir_name)
 				if not check_dirs('%s/%s' % (check_root, dir_name),

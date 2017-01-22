@@ -203,10 +203,14 @@ class HasDownloadLog:
 			if not ignore_failed:
 				today = datetime.datetime.today()
 				self.write('\n%s redownload %d failed\n' % (today, len(failed_list)))
-				cur_dir_list = os.listdir('.')
 				for fail_info, url, title, dirname in failed_list:
 					if not url in self.hdu:
-						dir_not_exist = not dirname in cur_dir_list
+						dir_not_exist = not os.path.isdir(dirname)
+						if dir_not_exist:
+							per_dir = '../%s' % dirname[:3]
+							if os.path.isdir(per_dir):
+								os.chdir(per_dir)
+								dir_not_exist = not os.path.isdir(dirname)
 						if dir_not_exist:
 							os.mkdir(dirname)
 							logfile = open(dirname + '/index.log', 'w+')
@@ -225,7 +229,7 @@ class HasDownloadLog:
 							self.write("\n")
 						logfile.write("\n")
 						logfile.close()
-						os.chdir('..')
+						os.chdir('../../work')
 		else:
 			self.f = open(filename, 'w+')
 	def write(self, content):

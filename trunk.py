@@ -1,8 +1,9 @@
 import re, urllib2, sys, os, time, datetime, argparse, string, random
 from bs4 import BeautifulSoup
 
-domain = 'http://c6.l5j.biz/'
-#domain = 'http://dz.jd4.biz/'
+domain = 'http://c6.r0y.org/'
+#domain = 'http://cl.od4.org/'
+#domain = 'http://dz.9w5.org/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -393,13 +394,13 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 	for a in reversed(soup('a', text='.::')):
 		# the tr contain 5 tds which are a, title, author, num, citime
 		sub_url = str(a['href'])
-		title_td = a.parent.next_sibling
+		title_td = a.parent.find_next_sibling('td')
 		title = unicode(title_td.h3.string)
 		encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
 		if page_pattern.match(title):
 			if clf.has_download(sub_url):
 				continue
-			citime = str(title_td.next_sibling.next_sibling.div.string)  # risk!!!!
+			citime = str(title_td.find_next_sibling('td').div.string)
 			now = str(time.time())
 			os.mkdir(now)
 			os.chdir(now)

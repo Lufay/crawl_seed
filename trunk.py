@@ -378,9 +378,9 @@ def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, downl
 		dwn_url = '%s/%s?%s' % (os.path.dirname(url), form_tag['action'], urllib.urlencode(dict(form_data)))
 		res = None
 		if download_retry > 0:
-			res = download(dwn_url, headers=hd, check=not_refresh, logfile=logfile, retry=download_retry)
+			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
 		else:
-			res = download(dwn_url, headers=hd, check=not_refresh, logfile=logfile)
+			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
 		if res != (False, "Refresh this page"):
 			break
 		else:
@@ -389,6 +389,29 @@ def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, downl
 			url = ('http://www.rmdown.com/link.php?hash=' + hash_code, referer)
 		time.sleep(2)
 	return res
+
+def jump_page(ori_url, logfile=sys.stdout):
+	logfile.write('%s\n' % ori_url.encode('cp1252', errors='ignore'))
+	content = open_page(ori_url)
+	if not content:
+		logfile.write("Can't open download link\n\n")
+		return False, "Can't open download link"
+	soup_d = BeautifulSoup(content, from_encoding='gbk')
+	if u'Loading' in unicode(soup_d.body):
+		jump = unicode(soup_d.meta['content'])
+		matched = redire_pattern.search(jump)
+		if not matched:
+			logfile.write('No redirect url\n\n')
+			return False, 'No redirect url'
+		jump_url = matched.group(1)
+		logfile.write('Jump to:\n%s\n' % jump_url)
+	if download_pattern.match(jump_url):
+		logfile.write('Url matched Success\n\n')
+		url = (jump_url, ori_url)
+		return new_download_seed(url, logfile)
+	else:
+		logfile.write('Url not matched\n\n')
+		return False, "Url not matched"
 
 def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	'''Crawl a topic page with domain + short_url,
@@ -413,47 +436,38 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 			#	logfile.write('Error: url not matched: %s\n' % url)
 			#	return False, "Url not matched"
 	download_img(soup_subject, num_jpg, logfile=logfile)
-	dla = soup_subject('a', text=download_pattern)
-	if len(dla) == 0:	# there isn't download link
-		dla = soup_subject('a', href=download_pattern)
-		if len(dla) == 0:
-			for s in soup_subject.body.strings:
-				m = text_download_pattern.search(s.encode('gb18030'))
-				if m:
-					dla.append({'href':m.group()})
-			if len(dla) == 0:
-				logfile.write('Error: not find dowload path in URL:%s\n' % url)
-				return False, "No Download Link"
+	dla_main = soup_subject('a', text=download_pattern)
+	dla_all = soup_subject('a', href=download_pattern)
+	main_urls = set([da['href'] for da in dla_main])
+	extra_urls = set([da['href'] for da in dla_all]) - main_urls
+	if len(main_urls) == 0:
+		for s in soup_subject.body.strings:
+			m = text_download_pattern.search(s.encode('gb18030'))
+			if m:
+				main_urls.add(m.group())
+		if len(main_urls) == 0:
+			logfile.write('Error: not find dowload path in URL:%s\n' % url)
+			res_main = (False, "No Download Link")
 	# log all links, download the first link
 	logfile.write('Torrent Download Link:\n')
-	# open download link
-	for da in dla:
-		ori_url = da['href']
-		logfile.write('%s\n' % ori_url.encode('cp1252', errors='ignore'))
-		content = open_page(ori_url)
-		if not content:
-			logfile.write("Can't open download link\n\n")
-			return False, "Can't open download link"
-		soup_d = BeautifulSoup(content, from_encoding='gbk')
-		if u'Loading' in unicode(soup_d.body):
-			jump = unicode(soup_d.meta['content'])
-			matched = redire_pattern.search(jump)
-			if not matched:
-				logfile.write('No redirect url\n\n')
-				return False, 'No redirect url'
-			jump_url = matched.group(1)
-			logfile.write('Jump to:\n%s\n' % jump_url)
-		if download_pattern.match(jump_url):
-			url = (jump_url, ori_url)
-			logfile.write('Url matched Success\n\n')
+	# download main link
+	for ori_url in main_urls:
+		res_main = jump_page(ori_url, logfile)
+		if res_main[0] or res_main[1] != 'Url not matched':
 			break
-		else:
-			logfile.write('Url not matched\n\n')
 	else:
 		logfile.write("No matched download url\n\n")
-		return False, "No matched download url"
-	# open the jumped path
-	return new_download_seed(url, logfile)
+		res_main = (False, "No matched download url")
+	# download extra link
+	extra_seed_dirname = 'extra_seed'
+	if len(extra_urls) > 0 and not os.path.isdir(extra_seed_dirname):
+		os.mkdir(extra_seed_dirname)
+		os.chdir(extra_seed_dirname)
+		with open('download.log', 'wb') as df_log:
+			for ori_url in extra_urls:
+				jump_page(ori_url, df_log)
+		os.chdir('..')
+	return res_main
 
 
 def crawl_content(content, clf=sys.stdout, max_retry=12):

@@ -4,8 +4,7 @@ import string, re
 import urllib, urllib2
 from bs4 import BeautifulSoup
 
-domain = 'http://cl.46g.co/'
-#domain = 'http://dz.zh4.co/'
+domain = 'http://cl.7sh.pw/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -403,11 +402,14 @@ def jump_page(ori_url, logfile=sys.stdout):
 		if not matched:
 			logfile.write('No redirect url\n\n')
 			return False, 'No redirect url'
-		jump_url = matched.group(1)
-		logfile.write('Jump to:\n%s\n' % jump_url)
-	if download_pattern.match(jump_url):
-		logfile.write('Url matched Success\n\n')
+		check_url = jump_url = matched.group(1)
 		url = (jump_url, ori_url)
+		logfile.write('Jump to:\n%s\n' % jump_url)
+	else:
+		check_url = url = ori_url
+		logfile.write('Stay in:\n%s\n' % ori_url)
+	if download_pattern.match(check_url):
+		logfile.write('Url matched Success\n\n')
 		return new_download_seed(url, logfile)
 	else:
 		logfile.write('Url not matched\n\n')
@@ -463,7 +465,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	if len(extra_urls) > 0 and not os.path.isdir(extra_seed_dirname):
 		os.mkdir(extra_seed_dirname)
 		os.chdir(extra_seed_dirname)
-		with open('download.log', 'wb') as df_log:
+		with open('download.log', 'w') as df_log:
 			for ori_url in extra_urls:
 				jump_page(ori_url, df_log)
 		os.chdir('..')
@@ -479,7 +481,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 	# install html5lib can avoid &# bug, what's more, from_encoding can be omitted
 	soup = BeautifulSoup(content, from_encoding='gbk')   #gb2312
 	# find subjects in the navigation page
-	for a in reversed(soup('a', text='.::')):
+	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
 		# the tr contain 5 tds which are a, title, author, num, citime
 		sub_url = str(a['href'])
 		title_td = a.parent.find_next_sibling('td')

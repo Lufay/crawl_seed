@@ -419,24 +419,29 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	'''Crawl a topic page with domain + short_url,
 	the aim is to crawl img and find torrent download link,
 	logfile for log the topic crawling state'''
-	url = "%s%s" % (domain, short_url)
 	while True:
+		url = "%s%s" % (domain, short_url)
 		content = open_page(url)
 		if not content:
 			logfile.write('Error: open page %s failed\n' % url)
 			return False, "Open Page Failed"
 		soup_subject = BeautifulSoup(content, from_encoding='gbk')
-		title = unicode(soup_subject.title.string)
-		if page_pattern.match(title):
-			break
+		meta = soup_subject.find('meta', {'http-equiv': 'refresh'})
+		if meta:
+			pattern = re.compile(ur'\s*\d+;\s*url=(.*\.html)', re.I)
+			mt = pattern.match(meta['content'])
+			if mt:
+				short_url = mt.group(1)
+			else:
+				return False, 'Refresh short_url failed'
 		else:
-			with open('dump.html', 'wb') as dump_file:
-				dump_file.write(content)
-			return False, "Check title failed"
-			#url = soup_subject('a')[-1]['href']
-			#if not url.startswith(domain):
-			#	logfile.write('Error: url not matched: %s\n' % url)
-			#	return False, "Url not matched"
+			title = unicode(soup_subject.title.string)
+			if page_pattern.match(title):
+				break
+			else:
+				with open('dump.html', 'wb') as dump_file:
+					dump_file.write(content)
+				return False, "Check title failed"
 	download_img(soup_subject, num_jpg, logfile=logfile)
 	dla_main = soup_subject('a', text=download_pattern)
 	dla_all = soup_subject('a', href=download_pattern)

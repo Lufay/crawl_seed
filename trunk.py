@@ -1,3 +1,4 @@
+# coding: gbk
 import sys, os, time, datetime
 import argparse, random
 import string, re
@@ -486,6 +487,8 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 	# install html5lib can avoid &# bug, what's more, from_encoding can be omitted
 	soup = BeautifulSoup(content, from_encoding='gbk')   #gb2312
 	# find subjects in the navigation page
+	today = datetime.date.today()
+	yesterday = today - datetime.date.resolution
 	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
 		# the tr contain 5 tds which are a, title, author, num, citime
 		sub_url = str(a['href'])
@@ -495,7 +498,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 		if page_pattern.match(title):
 			if clf.has_download(sub_url):
 				continue
-			citime = str(title_td.find_next_sibling('td').div.string)
+			citime = str(title_td.find_next_sibling('td').div.string.replace(u'×òÌì', yesterday.isoformat()).replace(u'½ñÌì', today.isoformat()))
 			now = str(time.time())
 			os.mkdir(now)
 			os.chdir(now)

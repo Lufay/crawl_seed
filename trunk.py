@@ -479,15 +479,18 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 
 
 def crawl_content(content, clf=sys.stdout, max_retry=12):
-	'''Crawl a forum page with its content,
+	'''Crawl a forum page with its (content, crawl_date),
 	clf for common log of all'''
+	if isinstance(content, (list, tuple)) and len(content) > 1:
+		content, today = content
+	else:
+		today = datetime.date.today()
 	if not content:
 		clf.write('Error: crawl None content!!\n')
 		return False
 	# install html5lib can avoid &# bug, what's more, from_encoding can be omitted
 	soup = BeautifulSoup(content, from_encoding='gbk')   #gb2312
 	# find subjects in the navigation page
-	today = datetime.date.today()
 	yesterday = today - datetime.date.resolution
 	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
 		# the tr contain 5 tds which are a, title, author, num, citime
@@ -544,11 +547,12 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
 	url = "%s%s%d" % (domain, pathquery, page_id)
 	for _ in xrange(max_retry):
 		content = open_page(url)
+		today_date = datetime.date.today()
 		if page_cache and page_id != 1:
 			url = "%s%s%d" % (domain, pathquery, page_id-1)
-			page_cache[page_id-1] = open_page(url)
+			page_cache[page_id-1] = open_page(url), datetime.date.today()
 		clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
-		if crawl_content(content, clf):
+		if crawl_content((content, today_date), clf):
 			break
 		else:
 			time.sleep(_+0.5)

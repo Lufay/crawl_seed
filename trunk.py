@@ -5,7 +5,7 @@ import string, re
 import urllib, urllib2
 from bs4 import BeautifulSoup
 
-domain = 'http://cl.7sh.pw/'
+domain = 'http://cl.afim.pw/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -98,6 +98,9 @@ def open_page(url, retry=20):
 			res.close()
 			print 'Success\n'
 			return content
+		except urllib2.HTTPError, e:
+			print e
+			return e.getcode(), e.reason
 		except:
 			print "open failed"
 			time.sleep(1.5)
@@ -192,6 +195,10 @@ class HasDownloadLog:
 	redownload_error = ('Download Retry Failed',
 			'Open Page Failed',
 			'Can\'t open download link')
+	black_error = ('No Valid Tag in center td',
+			'Dead download link',
+			'Internal Server Error')
+	black_short_url = set()
 	def __init__(self, filename, succ_prefix='htm_data/', log_sp='--+-+--', has_download_url = {}, ignore_failed=True):
 		self.sp = log_sp
 		self.hdu = has_download_url
@@ -206,12 +213,15 @@ class HasDownloadLog:
 					fail_snips = line.strip().split(log_sp)
 					if len(fail_snips) == 4:
 						fail_info, url = fail_snips[0:2]
-						if fail_info in self.redownload_error:
-							failed_dict[url] = fail_snips[0:1] + fail_snips[2:]
-						else:
-							if url in failed_dict:
-								del failed_dict[url]
-							print "Load log: ignore fail_info %s" % fail_info
+						if url not in self.black_short_url:
+							if fail_info in self.black_error:
+								self.black_short_url.add(url)
+							elif fail_info in self.redownload_error:
+								failed_dict[url] = fail_snips[0:1] + fail_snips[2:]
+							else:
+								if url in failed_dict:
+									del failed_dict[url]
+								print "Load log: ignore fail_info %s" % fail_info
 					else:
 						#print "Load log: Can't interpret line %r" % line
 						print "Load log: Can't interpret line '%s'" % line
@@ -219,7 +229,7 @@ class HasDownloadLog:
 				today = datetime.datetime.today()
 				self.write('\n%s redownload %d failed\n' % (today, len(failed_dict)))
 				for url in failed_dict:
-					if url not in self.hdu:
+					if url not in self.hdu and url not in self.black_short_url:
 						fail_info, title, dirname = failed_dict[url]
 						dir_not_exist = not os.path.isdir(dirname)
 						if dir_not_exist:
@@ -348,9 +358,12 @@ def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, downl
 			content = open_page(url)
 		if isinstance(url, (list, tuple)):
 			url, referer = url
+		if isinstance(content, tuple):
+			logfile.write('HTTP Error %d: %s\n' % content)
+			return False, content[1]
 		if not content:
 			logfile.write('Error: open page %s failed\n' % url)
-			res = (False, "Open Page Failed")
+			res = (False, "Open Seed Page Failed")
 			continue
 		soup_j = BeautifulSoup(content)
 		form_tag = soup_j.find('form')
@@ -393,6 +406,9 @@ def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, downl
 def jump_page(ori_url, logfile=sys.stdout):
 	logfile.write('%s\n' % ori_url.encode('cp1252', errors='ignore'))
 	content = open_page(ori_url)
+	if isinstance(content, tuple):
+		logfile.write('HTTP Error %d: %s\n' % content)
+		return False, content[1]
 	if not content:
 		logfile.write("Can't open download link\n\n")
 		return False, "Can't open download link"
@@ -423,6 +439,9 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	while True:
 		url = "%s%s" % (domain, short_url)
 		content = open_page(url)
+		if isinstance(content, tuple):
+			logfile.write('HTTP Error %d: %s\n' % content)
+			return False, content[1]
 		if not content:
 			logfile.write('Error: open page %s failed\n' % url)
 			return False, "Open Page Failed"
@@ -495,6 +514,8 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
 		# the tr contain 5 tds which are a, title, author, num, citime
 		sub_url = str(a['href'])
+		if sub_url in HasDownloadLog.black_short_url:
+			continue
 		title_td = a.parent.find_next_sibling('td')
 		title = unicode(title_td.h3.string)
 		encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
@@ -547,10 +568,15 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
 	url = "%s%s%d" % (domain, pathquery, page_id)
 	for _ in xrange(max_retry):
 		content = open_page(url)
+		if isinstance(content, tuple):
+			return
 		today_date = datetime.date.today()
 		if page_cache and page_id != 1:
 			url = "%s%s%d" % (domain, pathquery, page_id-1)
-			page_cache[page_id-1] = open_page(url), datetime.date.today()
+			pre_content = open_page(url)
+			if isinstance(content, tuple):
+				return
+			page_cache[page_id-1] = pre_content, datetime.date.today()
 		clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
 		if crawl_content((content, today_date), clf):
 			break

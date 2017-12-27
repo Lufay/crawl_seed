@@ -247,12 +247,16 @@ class HasDownloadLog:
 						os.chdir(dirname)
 						logfile = open('index.log', 'a')
 						logfile.write('\nRedownload\n')
-						if crawl_subject(url,
-								50 if dir_not_exist else 0,
-								logfile)[0]:
+						res = crawl_subject(url, 50 if dir_not_exist else 0, logfile)
+						if res[0]:
 							self.hdu[url] = dirname
 							self.write((url, title, dirname))
 							self.write("\n")
+						elif res[1] != fail_info:
+							self.write((res[1], url, title, dirname))
+							self.write("\n")
+							if res[1] in self.black_error:
+								self.black_short_url.add(url)
 						logfile.write("\n")
 						logfile.close()
 						os.chdir('../../work')
@@ -541,6 +545,8 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 					time.sleep(_+0.5)
 				else:
 					clf.write([res_tuple[1], sub_url, encode_title, now])
+					if res_tuple[1] in HasDownloadLog.black_error:
+						HasDownloadLog.black_short_url.add(sub_url)
 					break
 			else:
 				clf.write(["Open Page Failed", sub_url, encode_title, now])

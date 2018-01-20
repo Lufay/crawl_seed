@@ -315,53 +315,6 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 			content = open_page(url, open_page_retry)
 		else:
 			content = open_page(url)
-		if not content:
-			logfile.write('Error: open page %s failed\n' % url)
-			res = (False, "Open Page Failed")
-			continue
-		soup_j = BeautifulSoup(content)
-		form_tag = soup_j.find('form')
-		if not form_tag:
-			logfile.write('Error: can\'t find form tag at %s\n' % url)
-			logfile.write('Content:\n%s\n' % content)
-			res = (False, "No Form Tag")
-			continue
-		dwn_url = '%s/%s' % (os.path.dirname(url), form_tag['action'])
-	#	use html5lib form is not the parent of table
-	#	input_tags = form_tag('input')
-		input_tags = soup_j.find('td', align='center')('input')
-		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
-		boundary = gen_boundary()
-		post_data = fill_in_post_data(boundary, form_data)
-		hd = header.copy()
-		hd.update({
-			'Cache-Control': 'max-age=0',
-			'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
-			'Content-Length': len(post_data)
-		})
-		res = None
-		if download_retry > 0:
-			res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=download_retry)
-		else:
-			res = download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
-		if res != (False, "Refresh this page"):
-			break
-		else:
-			hash_code = url.split('=', 2)[1]
-			# the const str of addr is from refresh page hit, so it can be extracted from that page
-			url = 'http://www.rmdown.com/link.php?hash=' + hash_code
-		time.sleep(2)
-	return res
-
-def download_seed_v2(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
-	'''download seed from hash page
-	'''
-	for _ in xrange(retry):
-		content = ''
-		if open_page_retry > 0:
-			content = open_page(url, open_page_retry)
-		else:
-			content = open_page(url)
 		if isinstance(url, (list, tuple)):
 			url, referer = url
 		if isinstance(content, tuple):
@@ -378,28 +331,9 @@ def download_seed_v2(url, logfile=sys.stdout, retry=5, open_page_retry=0, downlo
 			logfile.write('Content:\n%s\n' % content)
 			res = (False, "No Form Tag")
 			continue
-	#	use html5lib form is not the parent of table
-	#	input_tags = form_tag('input')
-		center_tag = soup_j.find('td', align='center')
-		input_tags = center_tag('input')
-		if len(input_tags) == 0:
-			magnet_a = center_tag.find('a', text='Download this file using magnet')
-			if magnet_a:
-				filename = 'magnet.torrent'
-				with open(filename, 'wb') as f:
-					f.write(magnet_a['href'])
-				res = (True, filename)
-				break
-			else:
-				res = (False, "No Valid Tag in center td")
-				continue
-		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
-		dwn_url = '%s/%s?%s' % (os.path.dirname(url), form_tag['action'], urllib.urlencode(dict(form_data)))
-		res = None
-		if download_retry > 0:
-			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
-		else:
-			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
+		res = download_seed_by_get_v2(form_tag, os.path.dirname(url), logfile, download_retry)
+		if res in ((False, "No Valid Tag in center td"), (False, "No Input Tag in Form")):
+			continue
 		if res != (False, "Refresh this page"):
 			break
 		else:
@@ -409,50 +343,56 @@ def download_seed_v2(url, logfile=sys.stdout, retry=5, open_page_retry=0, downlo
 		time.sleep(2)
 	return res
 
-def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
-	'''download seed from hash page
-	'''
-	for _ in xrange(retry):
-		content = ''
-		if open_page_retry > 0:
-			content = open_page(url, open_page_retry)
+def download_seed_by_post(form_tag, soup, hosturl, logfile=sys.stdout, download_retry=0):
+	dwn_url = '%s/%s' % (hosturl, form_tag['action'])
+#	use html5lib form is not the parent of table
+#	input_tags = form_tag('input')
+	input_tags = soup.find('td', align='center')('input')
+	form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
+	boundary = gen_boundary()
+	post_data = fill_in_post_data(boundary, form_data)
+	hd = header.copy()
+	hd.update({
+		'Cache-Control': 'max-age=0',
+		'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
+		'Content-Length': len(post_data)
+	})
+	if download_retry > 0:
+		return download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=download_retry)
+	else:
+		return download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
+
+def download_seed_by_get_v1(form_tag, soup, hosturl, logfile=sys.stdout, download_retry=0):
+#	use html5lib form is not the parent of table
+#	input_tags = form_tag('input')
+	center_tag = soup.find('td', align='center')
+	input_tags = center_tag('input')
+	if len(input_tags) == 0:
+		magnet_a = center_tag.find('a', text='Download this file using magnet')
+		if magnet_a:
+			filename = 'magnet.torrent'
+			with open(filename, 'wb') as f:
+				f.write(magnet_a['href'])
+			return True, filename
 		else:
-			content = open_page(url)
-		if isinstance(url, (list, tuple)):
-			url, referer = url
-		if isinstance(content, tuple):
-			logfile.write('HTTP Error %d: %s\n' % content)
-			return False, content[1]
-		if not content:
-			logfile.write('Error: open page %s failed\n' % url)
-			res = (False, "Open Seed Page Failed")
-			continue
-		soup_j = BeautifulSoup(content)
-		form_tag = soup_j.find('form')
-		if not form_tag:
-			logfile.write('Error: can\'t find form tag at %s\n' % url)
-			logfile.write('Content:\n%s\n' % content)
-			res = (False, "No Form Tag")
-			continue
-		input_tags = form_tag('input')
-		if len(input_tags) == 0:
-			res = (False, "No Input Tag in Form")
-			continue
-		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
-		dwn_url = '%s/%s?%s' % (os.path.dirname(url), form_tag['action'], urllib.urlencode(dict(form_data)))
-		res = None
-		if download_retry > 0:
-			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
-		else:
-			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
-		if res != (False, "Refresh this page"):
-			break
-		else:
-			hash_code = url.split('=', 2)[1]
-			# the const str of addr is from refresh page hit, so it can be extracted from that page
-			url = ('http://www.rmdown.com/link.php?hash=' + hash_code, referer)
-		time.sleep(2)
-	return res
+			return False, "No Valid Tag in center td"
+	form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
+	dwn_url = '%s/%s?%s' % (hosturl, form_tag['action'], urllib.urlencode(dict(form_data)))
+	if download_retry > 0:
+		return download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
+	else:
+		return download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
+
+def download_seed_by_get_v2(form_tag, hosturl, logfile=sys.stdout, download_retry=0):
+	input_tags = form_tag('input')
+	if len(input_tags) == 0:
+		return False, "No Input Tag in Form"
+	form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
+	dwn_url = '%s/%s?%s' % (hosturl, form_tag['action'], urllib.urlencode(dict(form_data)))
+	if download_retry > 0:
+		return download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
+	else:
+		return download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
 
 def jump_page(ori_url, logfile=sys.stdout):
 	logfile.write('%s\n' % ori_url.encode('cp1252', errors='ignore'))
@@ -478,7 +418,7 @@ def jump_page(ori_url, logfile=sys.stdout):
 		logfile.write('Stay in:\n%s\n' % ori_url)
 	if download_pattern.match(check_url):
 		logfile.write('Url matched Success\n\n')
-		return new_download_seed(url, logfile)
+		return download_seed(url, logfile)
 	else:
 		logfile.write('Url not matched\n\n')
 		return False, "Url not matched"

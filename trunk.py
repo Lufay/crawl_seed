@@ -353,7 +353,7 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 		time.sleep(2)
 	return res
 
-def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
+def download_seed_v2(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
 	'''download seed from hash page
 	'''
 	for _ in xrange(retry):
@@ -393,6 +393,51 @@ def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, downl
 			else:
 				res = (False, "No Valid Tag in center td")
 				continue
+		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
+		dwn_url = '%s/%s?%s' % (os.path.dirname(url), form_tag['action'], urllib.urlencode(dict(form_data)))
+		res = None
+		if download_retry > 0:
+			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile, retry=download_retry)
+		else:
+			res = download(dwn_url, filename='GENERATE_FROM_RESPONSE', check=not_refresh, logfile=logfile)
+		if res != (False, "Refresh this page"):
+			break
+		else:
+			hash_code = url.split('=', 2)[1]
+			# the const str of addr is from refresh page hit, so it can be extracted from that page
+			url = ('http://www.rmdown.com/link.php?hash=' + hash_code, referer)
+		time.sleep(2)
+	return res
+
+def new_download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
+	'''download seed from hash page
+	'''
+	for _ in xrange(retry):
+		content = ''
+		if open_page_retry > 0:
+			content = open_page(url, open_page_retry)
+		else:
+			content = open_page(url)
+		if isinstance(url, (list, tuple)):
+			url, referer = url
+		if isinstance(content, tuple):
+			logfile.write('HTTP Error %d: %s\n' % content)
+			return False, content[1]
+		if not content:
+			logfile.write('Error: open page %s failed\n' % url)
+			res = (False, "Open Seed Page Failed")
+			continue
+		soup_j = BeautifulSoup(content)
+		form_tag = soup_j.find('form')
+		if not form_tag:
+			logfile.write('Error: can\'t find form tag at %s\n' % url)
+			logfile.write('Content:\n%s\n' % content)
+			res = (False, "No Form Tag")
+			continue
+		input_tags = form_tag('input')
+		if len(input_tags) == 0:
+			res = (False, "No Input Tag in Form")
+			continue
 		form_data = [(str(input_tag['name']),str(input_tag['value'])) for input_tag in input_tags]
 		dwn_url = '%s/%s?%s' % (os.path.dirname(url), form_tag['action'], urllib.urlencode(dict(form_data)))
 		res = None

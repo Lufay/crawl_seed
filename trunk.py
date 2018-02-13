@@ -16,7 +16,7 @@ header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTM
 }
 # header['Cache-Control'] = 'no-cache'
 
-page_pattern = re.compile(ur'^(?:[([][\u4e00-\u9fa5\w/. +-]+[)\]]?)+')
+page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6')
 download_pattern = re.compile(ur'http://w*[._]*(rmdown|xunfs)[._]*com')
 text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?hash=[0-9a-fA-F]+')
 redire_pattern = re.compile(ur'url=(.*)$')
@@ -199,7 +199,8 @@ class HasDownloadLog:
 			)
 	black_error = ('No Valid Tag in center td',
 			'Dead download link',
-			'Internal Server Error')
+			'Internal Server Error',
+			'Not Found')
 	black_short_url = set()
 	def __init__(self, filename, succ_prefix='htm_data/', log_sp='--+-+--', has_download_url = {}, ignore_failed=True):
 		self.sp = log_sp

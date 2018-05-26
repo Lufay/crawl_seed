@@ -28,6 +28,11 @@ endID = 945883
 #endID = htm_data/15/1606/1958974.html
 #beginID = htm_data/15/1606/1959767.html
 #endID = htm_data/15/1606/1960015.html
+#...
+#beginID = htm_data/15/1711/2764239.html
+#endID = htm_data/15/1711/2764244.html
+#beginID = htm_data/15/1712/2840328.html
+#endID = htm_data/15/1712/2840347.html
 
 
 

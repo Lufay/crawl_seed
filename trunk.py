@@ -5,7 +5,7 @@ import string, re
 import urllib, urllib2
 from bs4 import BeautifulSoup
 
-domain = 'http://cl.g0d7.pw/'
+domain = 'http://cl.svtk.pw/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -195,7 +195,9 @@ class HasDownloadLog:
 	redownload_error = ('Download Retry Failed',
 			'Open Page Failed',
 			'Can\'t open download link',
-			'Check title failed'
+			'Check title failed',
+			'Gateway Time-out',
+			'Origin Error'
 			)
 	black_error = ('No Valid Tag in center td',
 			'Dead download link',

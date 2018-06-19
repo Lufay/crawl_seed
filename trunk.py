@@ -302,8 +302,15 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
 			img_pattern_str = r'\.%s$' % img_suffix
 		elif isinstance(img_suffix, (list, tuple)):
 			img_pattern_str = r'\.(%s)$' % '|'.join(img_suffix)
-		for img in soup('img', src=re.compile(img_pattern_str)):
-			res = download(img['src'], logfile=logfile)
+                pattern = re.compile(img_pattern_str)
+                it = soup('img', src=pattern)
+                if it:
+                    attr = 'src'
+                else:
+                    attr = 'data-src'
+                    it = soup('img', {attr:pattern})
+                for img in it:
+			res = download(img[attr], logfile=logfile)
 			if res == (False, 'Existed'):
 				break
 			elif res[0]:
@@ -515,7 +522,11 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 		if sub_url in HasDownloadLog.black_short_url:
 			continue
 		title_td = a.parent.find_next_sibling('td')
-		title = unicode(title_td.h3.string)
+                test_title = title_td.h3.string
+                if test_title is None:
+                    title = u''.join(title_td.h3.strings)
+                else:
+                    title = unicode(test_title)
 		encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
 		if page_pattern.match(title):
 			if clf.has_download(sub_url):

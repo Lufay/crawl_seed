@@ -4,11 +4,18 @@ import argparse, random
 import string, re
 import urllib, urllib2
 from bs4 import BeautifulSoup
+try:
+    import lxml
+    html_parser = 'lxml'
+except ImportError:
+    html_parser = 'html.parser'
+print 'using parser %s' % html_parser
 
-domain = 'https://cl.unkbz.com/'
-#domain = 'https://cl.mpeic.com/'
-#domain = 'https://cl.iuffu.com/'
-#domain = 'https://cl.wddya.com/'
+domain = 'https://cc.o8q.win/'
+#domain = 'https://cc.8qc.win/'
+#domain = 'https://c6.g0e.info/'
+#domain = 'https://bid.ue4.bid/'
+#domain = 'https://bid.bd8.bid/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -338,7 +345,7 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 			logfile.write('Error: open page %s failed\n' % url)
 			res = (False, "Open Seed Page Failed")
 			continue
-		soup_j = BeautifulSoup(content, "html.parser")
+		soup_j = BeautifulSoup(content, html_parser)
 		form_tag = soup_j.find('form')
 		if not form_tag:
 			logfile.write('Error: can\'t find form tag at %s\n' % url)
@@ -417,7 +424,7 @@ def jump_page(ori_url, logfile=sys.stdout):
 	if not content:
 		logfile.write("Can't open download link\n\n")
 		return False, "Can't open download link"
-	soup_d = BeautifulSoup(content, "html.parser", from_encoding='gbk')
+	soup_d = BeautifulSoup(content, html_parser, from_encoding='gbk')
 	if u'Loading' in unicode(soup_d.body):
 		jump = unicode(soup_d.meta['content'])
 		matched = redire_pattern.search(jump)
@@ -450,7 +457,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 		if not content:
 			logfile.write('Error: open page %s failed\n' % url)
 			return False, "Open Page Failed"
-		soup_subject = BeautifulSoup(content, "html.parser", from_encoding='gbk')
+		soup_subject = BeautifulSoup(content, html_parser, from_encoding='gbk')
 		meta = soup_subject.find('meta', {'http-equiv': 'refresh'})
 		if meta:
 			pattern = re.compile(ur'\s*\d+;\s*url=(.*\.html)', re.I)
@@ -513,7 +520,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 		clf.write('Error: crawl None content!!\n')
 		return False
 	# install html5lib can avoid &# bug, what's more, from_encoding can be omitted
-	soup = BeautifulSoup(content, "html.parser", from_encoding='gbk')   #gb2312
+	soup = BeautifulSoup(content, html_parser, from_encoding='gbk')   #gb2312
 	# find subjects in the navigation page
 	yesterday = today - datetime.date.resolution
 	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):

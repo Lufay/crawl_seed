@@ -11,11 +11,9 @@ except ImportError:
     html_parser = 'html.parser'
 print 'using parser %s' % html_parser
 
-domain = 'https://cc.o8q.win/'
-#domain = 'https://cc.8qc.win/'
-#domain = 'https://c6.g0e.info/'
-#domain = 'https://bid.ue4.bid/'
-#domain = 'https://bid.bd8.bid/'
+domain = 'https://in.i3h.info/'
+#domain = 'https://in.6w1.info/'
+#domain = 'https://cl.abjsh.info/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -477,8 +475,9 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	download_img(soup_subject, num_jpg, logfile=logfile)
 	dla_main = soup_subject('a', text=download_pattern)
 	dla_all = soup_subject('a', href=download_pattern)
-	main_urls = set([da['href'] for da in dla_main])
-	extra_urls = set([da['href'] for da in dla_all]) - main_urls
+        # soup_subject.h4 is the title too
+	main_urls = set([da['href'] for da in dla_main]
+                + [da['href'] for da in dla_all if da.string == soup_subject.h4.string])
 	if len(main_urls) == 0:
 		for s in soup_subject.body.strings:
 			m = text_download_pattern.search(s.encode('gb18030'))
@@ -487,16 +486,18 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 		if len(main_urls) == 0:
 			logfile.write('Error: not find dowload path in URL:%s\n' % url)
 			res_main = (False, "No Download Link")
+	extra_urls = set([da['href'] for da in dla_all]) - main_urls
 	# log all links, download the first link
-	logfile.write('Torrent Download Link:\n')
-	# download main link
-	for ori_url in main_urls:
-		res_main = jump_page(ori_url, logfile)
-		if res_main[0] or res_main[1] != 'Url not matched':
-			break
-	else:
-		logfile.write("No matched download url\n\n")
-		res_main = (False, "No matched download url")
+        if len(main_urls) > 0:
+            logfile.write('Torrent Download Link:\n')
+            # download main link
+            for ori_url in main_urls:
+                    res_main = jump_page(ori_url, logfile)
+                    if res_main[0] or res_main[1] != 'Url not matched':
+                            break
+            else:
+                    logfile.write("No matched download url\n\n")
+                    res_main = (False, "No matched download url")
 	# download extra link
 	extra_seed_dirname = 'extra_seed'
 	if len(extra_urls) > 0 and not os.path.isdir(extra_seed_dirname):

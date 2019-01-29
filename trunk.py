@@ -1,4 +1,5 @@
 # coding: gbk
+
 import sys, os, time, datetime
 import argparse, random
 import string, re
@@ -56,7 +57,7 @@ class GetFileLine:
 		line_size = self.lb
 		while line_size <= self.file_size:
 			self.f.seek(-line_size, 2)
-			rlines = self.f.readlines()
+			rlines = self.f.readlines()[1:]
 			if len(rlines) > n:
 				for line in reversed(rlines):
 					line = line.strip()
@@ -296,8 +297,9 @@ class HasDownloadLog:
 def not_refresh(content):
 	'''A check function,
 	ret val must be bool, "info".'''
-	if content.strip().startswith('Refresh this page'):
-		return False, 'Refresh this page'
+	flag = 'Refresh this page'
+	if flag in content:
+		return False, flag, content
 	return True, ''
 
 def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
@@ -350,15 +352,16 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 			logfile.write('Content:\n%s\n' % content)
 			res = (False, "No Form Tag")
 			continue
-		res = download_seed_by_get_v2(form_tag, os.path.dirname(url), logfile, download_retry)
+		hosturl = os.path.dirname(url)
+		res = download_seed_by_get_v2(form_tag, hosturl, logfile, download_retry)
 		if res in ((False, "No Valid Tag in center td"), (False, "No Input Tag in Form")):
 			continue
-		if res != (False, "Refresh this page"):
+		if res[1] != "Refresh this page":
 			break
 		else:
-			hash_code = url.split('=', 2)[1]
-			# the const str of addr is from refresh page hit, so it can be extracted from that page
-			url = ('http://www.rmdown.com/link.php?hash=' + hash_code, referer)
+			#hash_code = url.split('=', 2)[1]
+			soup_r = BeautifulSoup(res[2], html_parser)
+			url = ('%s/%s' % (hosturl, soup_r.a['href']), referer)
 		time.sleep(2)
 	return res
 

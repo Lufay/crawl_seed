@@ -12,9 +12,9 @@ except ImportError:
     html_parser = 'html.parser'
 print 'using parser %s' % html_parser
 
-domain = 'https://in.i3h.info/'
-#domain = 'https://in.6w1.info/'
-#domain = 'https://cl.abjsh.info/'
+domain = 'https://cl.fcfxg.com/'
+#domain = 'https://cl.sspxc.com/'
+#domain = 'https://cl.hyzro.com/'
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
 		'Connection' : 'keep-alive',
@@ -26,7 +26,7 @@ header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTM
 }
 # header['Cache-Control'] = 'no-cache'
 
-page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6')
+page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6|.*\u7063\u642d.*\u65b0\u7247\u9996\u53d1')
 download_pattern = re.compile(ur'http://w*[._]*(rmdown|xunfs)[._]*com')
 text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?hash=[0-9a-fA-F]+')
 redire_pattern = re.compile(ur'url=(.*)$')
@@ -356,12 +356,14 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 		res = download_seed_by_get_v2(form_tag, hosturl, logfile, download_retry)
 		if res in ((False, "No Valid Tag in center td"), (False, "No Input Tag in Form")):
 			continue
-		if res[1] != "Refresh this page":
-			break
-		else:
+		if res[1] == "Refresh this page":
 			#hash_code = url.split('=', 2)[1]
 			soup_r = BeautifulSoup(res[2], html_parser)
-			url = ('%s/%s' % (hosturl, soup_r.a['href']), referer)
+			url = '%s/%s' % (hosturl, soup_r.a['href'])
+			if 'referer' in locals():
+				url = (url, referer)
+		else:
+			break
 		time.sleep(2)
 	return res
 
@@ -479,7 +481,8 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
 	dla_main = soup_subject('a', text=download_pattern)
 	dla_all = soup_subject('a', href=download_pattern)
         # soup_subject.h4 is the title too
-	main_urls = set([da['href'] for da in dla_main]
+	main_urls = set([da['href'] if download_pattern.search(da['href'])
+			else da.string for da in dla_main]
                 + [da['href'] for da in dla_all if da.string == soup_subject.h4.string])
 	if len(main_urls) == 0:
 		for s in soup_subject.body.strings:

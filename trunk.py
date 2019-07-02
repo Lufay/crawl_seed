@@ -12,7 +12,7 @@ except ImportError:
     html_parser = 'html.parser'
 print 'using parser %s' % html_parser
 
-domain = 'https://cl.fcfxg.com/'
+domain = 'https://cl.axvxj.com/'
 #domain = 'https://cl.sspxc.com/'
 #domain = 'https://cl.hyzro.com/'
 pathquery = 'thread0806.php?fid=2&search=&page='
@@ -221,7 +221,7 @@ class HasDownloadLog:
 			self.f = open(filename, 'r+')
 			failed_dict = {}
 			for line in self.f:
-				if line.startswith(succ_prefix):
+				if HasDownloadLog.is_succ_download(line, succ_prefix):
 					url = line[:line.find(log_sp)]
 					self.hdu[url] = line[line.rfind(log_sp)+len(log_sp):]
 				elif not ignore_failed:
@@ -290,9 +290,24 @@ class HasDownloadLog:
 	def close(self):
 		self.f.close()
 	def has_download(self, short_url):
-		return short_url in self.hdu
+		return short_url in self.hdu or change_sub_url_form(short_url) in self.hdu
 	def add_download(self, short_url, dirname):
 		self.hdu[short_url] = dirname
+	@staticmethod
+	def is_succ_download(line, succ_prefix):
+		if isinstance(succ_prefix, (str, unicode)):
+                    return line.startswith(succ_prefix)
+		elif isinstance(succ_prefix, (list, tuple)):
+                    for prefix in succ_prefix:
+                        if line.startswith(prefix):
+                            return True
+
+def change_sub_url_form(sub_url):
+	'''change htm_data/1903/2/3476625.html to htm_data/2/31903/476625.html
+	'''
+	sub_url_seg = sub_url.split('/', 3)
+	sub_url_seg[1], sub_url_seg[2] = sub_url_seg[2], sub_url_seg[1]
+        return '/'.join(sub_url_seg)
 
 def not_refresh(content):
 	'''A check function,
@@ -533,7 +548,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
 	for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
 		# the tr contain 5 tds which are a, title, author, num, citime
 		sub_url = str(a['href'])
-		if sub_url in HasDownloadLog.black_short_url:
+		if sub_url in HasDownloadLog.black_short_url or clf.has_download(sub_url):
 			continue
 		title_td = a.parent.find_next_sibling('td')
                 test_title = title_td.h3.string
@@ -543,8 +558,6 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
                     title = unicode(test_title)
 		encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
 		if page_pattern.match(title):
-			if clf.has_download(sub_url):
-				continue
 			citime = str(title_td.find_next_sibling('td').div.string.replace(u'×òÌì', yesterday.isoformat()).replace(u'½ñÌì', today.isoformat()))
 			now = str(time.time())
 			os.mkdir(now)
@@ -626,7 +639,7 @@ def main():
 		pathquery = pathquery.replace('2', '15')
 	elif arg.which == 'o' or arg.which == 'occident':
 		pathquery = pathquery.replace('2', '4')
-	clf = HasDownloadLog('index.log', 'htm_data/', ignore_failed=arg.redownload)
+	clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='), ignore_failed=arg.redownload)
 	page_range = []
 	page_cache = {}
 	if len(arg.page) == 2:

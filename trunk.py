@@ -3,7 +3,7 @@
 import sys, os, time, datetime
 import argparse, random
 import string, re
-import urllib, urllib2
+import urllib, urllib2, cookielib
 from bs4 import BeautifulSoup
 try:
     import lxml
@@ -12,14 +12,21 @@ except ImportError:
     html_parser = 'html.parser'
 print 'using parser %s' % html_parser
 
-domain = 'https://cl.axvxj.com/'
-#domain = 'https://cl.sspxc.com/'
-#domain = 'https://cl.hyzro.com/'
+cj = cookielib.LWPCookieJar()
+cookie_support = urllib2.HTTPCookieProcessor(cj)
+opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
+urllib2.install_opener(opener)
+
+#domain = 'https://cl.yfbdk.com/'
+#domain = 'https://cl.grkhc.com/'
+domain = 'https://cc.yfbdk.com/'
+#domain = 'https://co.grkhc.com/'
+#domain = 'https://co.yfbdk.com/'
 pathquery = 'thread0806.php?fid=2&search=&page='
-header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/31.0.1650.63 Safari/537.36',
+header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
 		'Connection' : 'keep-alive',
-		'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
-		'Accept-Language' : 'zh-CN,zh;q=0.8'
+		'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+		'Accept-Language' : 'zh-CN,zh;q=0.9'
 #               'Accept-Encoding': 'gzip, deflate, sdch',
 #		'Referer' : domain + 'index.php',
 #		'Host' : domain[7:-1],
@@ -379,7 +386,7 @@ def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_
 				url = (url, referer)
 		else:
 			break
-		time.sleep(2)
+		time.sleep(1)
 	return res
 
 def download_seed_by_post(form_tag, soup, hosturl, logfile=sys.stdout, download_retry=0):

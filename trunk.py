@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # coding: gbk
 
 import sys, os, time, datetime
@@ -17,14 +18,8 @@ cookie_support = urllib2.HTTPCookieProcessor(cj)
 opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
 urllib2.install_opener(opener)
 
-domain = 'https://cc.bcbbb.xyz/'
-#domain = 'https://cc.bcbcc.xyz/'
-#domain = 'https://cl.321i.xyz/'
-#domain = 'https://cl.bcbbb.xyz/'
-#domain = 'https://cl.bcbcc.xyz/'
-#domain = 'https://cl.ccc5.ga/'
-#domain = 'https://co.bcbbb.xyz/'
-#domain = 'https://co.bcbcc.xyz/'
+with open('url') as f:
+    domain = f.readline().strip()
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
         'Connection' : 'keep-alive',
@@ -306,18 +301,18 @@ class HasDownloadLog:
     @staticmethod
     def is_succ_download(line, succ_prefix):
         if isinstance(succ_prefix, (str, unicode)):
-                    return line.startswith(succ_prefix)
+            return line.startswith(succ_prefix)
         elif isinstance(succ_prefix, (list, tuple)):
-                    for prefix in succ_prefix:
-                        if line.startswith(prefix):
-                            return True
+            for prefix in succ_prefix:
+                if line.startswith(prefix):
+                    return True
 
 def change_sub_url_form(sub_url):
     '''change htm_data/1903/2/3476625.html to htm_data/2/31903/476625.html
     '''
     sub_url_seg = sub_url.split('/', 3)
     sub_url_seg[1], sub_url_seg[2] = sub_url_seg[2], sub_url_seg[1]
-        return '/'.join(sub_url_seg)
+    return '/'.join(sub_url_seg)
 
 def not_refresh(content):
     '''A check function,
@@ -334,14 +329,14 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
             img_pattern_str = r'\.%s$' % img_suffix
         elif isinstance(img_suffix, (list, tuple)):
             img_pattern_str = r'\.(%s)$' % '|'.join(img_suffix)
-                pattern = re.compile(img_pattern_str)
-                it = soup('img', src=pattern)
-                if it:
-                    attr = 'src'
-                else:
-                    attr = 'data-src'
-                    it = soup('img', {attr:pattern})
-                for img in it:
+        pattern = re.compile(img_pattern_str)
+        it = soup('img', src=pattern)
+        if it:
+            attr = 'src'
+        else:
+            attr = 'data-src'
+            it = soup('img', {attr:pattern})
+        for img in it:
             res = download(img[attr], logfile=logfile)
             if res == (False, 'Existed'):
                 break
@@ -505,7 +500,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
     download_img(soup_subject, num_jpg, logfile=logfile)
     dla_main = soup_subject('a', text=download_pattern)
     dla_all = soup_subject('a', href=download_pattern)
-        # soup_subject.h4 is the title too
+    # soup_subject.h4 is the title too
     main_urls = set([da['href'] if download_pattern.search(da['href'])
             else da.string for da in dla_main]
                 + [da['href'] for da in dla_all if da.string == soup_subject.h4.string])
@@ -519,16 +514,16 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
             res_main = (False, "No Download Link")
     extra_urls = set([da['href'] for da in dla_all]) - main_urls
     # log all links, download the first link
-        if len(main_urls) > 0:
-            logfile.write('Torrent Download Link:\n')
-            # download main link
-            for ori_url in main_urls:
-                    res_main = jump_page(ori_url, logfile)
-                    if res_main[0] or res_main[1] != 'Url not matched':
-                            break
-            else:
-                    logfile.write("No matched download url\n\n")
-                    res_main = (False, "No matched download url")
+    if len(main_urls) > 0:
+        logfile.write('Torrent Download Link:\n')
+        # download main link
+        for ori_url in main_urls:
+            res_main = jump_page(ori_url, logfile)
+            if res_main[0] or res_main[1] != 'Url not matched':
+                break
+        else:
+            logfile.write("No matched download url\n\n")
+            res_main = (False, "No matched download url")
     # download extra link
     extra_seed_dirname = 'extra_seed'
     if len(extra_urls) > 0 and not os.path.isdir(extra_seed_dirname):
@@ -561,11 +556,11 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
         if sub_url in HasDownloadLog.black_short_url or clf.has_download(sub_url):
             continue
         title_td = a.parent.find_next_sibling('td')
-                test_title = title_td.h3.string
-                if test_title is None:
-                    title = u''.join(title_td.h3.strings)
-                else:
-                    title = unicode(test_title)
+        test_title = title_td.h3.string
+        if test_title is None:
+            title = u''.join(title_td.h3.strings)
+        else:
+            title = unicode(test_title)
         encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
         if page_pattern.match(title):
             citime = str(title_td.find_next_sibling('td').div.string.replace(u'×òÌì', yesterday.isoformat()).replace(u'½ñÌì', today.isoformat()))

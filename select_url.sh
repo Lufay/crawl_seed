@@ -22,7 +22,11 @@ awk '/statistics/{
 }
 END {
 	for(key in domain) {
-		print key, domain[key], loss_rate[key], avg[key]
+		print key, domain[key], loss_rate[key], (key in avg) ? avg[key] : 9999.99
 	}
 }
-' $logfile | sort -k4 -n
+' $logfile | sort -k4 -n |tee url.sorted
+
+awk '{
+	print "https://" $2 "/"
+}' url.sorted > url

@@ -490,7 +490,11 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
             else:
                 return False, 'Refresh short_url failed'
         else:
-            title = unicode(soup_subject.title.string)
+            title = u''
+            try:
+                title = unicode(soup_subject.title.string)
+            except AttributeError, e:
+                logfile.write('Error: get content\'s title failed\n')
             if page_pattern.match(title):
                 break
             else:

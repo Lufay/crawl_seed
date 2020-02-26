@@ -115,7 +115,7 @@ def open_page(url, retry=20):
             return content
         except urllib2.HTTPError, e:
             print e
-            return e.getcode(), e.reason
+            return e.getcode(), e.reason if e.reason else 'Unknown HTTP Error'
         except:
             print "open failed"
             time.sleep(1.5)
@@ -212,6 +212,8 @@ class HasDownloadLog:
             'Can\'t open download link',
             'Check title failed',
             'Gateway Time-out',
+            'Unknown HTTP Error',
+            'Open Seed Page Failed',
             'Origin Error'
             )
     black_error = ('No Valid Tag in center td',
@@ -323,19 +325,19 @@ def not_refresh(content):
     return True, ''
 
 def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
-    if num > 0:
+    if num != 0:
         print 'Download img ',
         if isinstance(img_suffix, (str, unicode)):
             img_pattern_str = r'\.%s$' % img_suffix
         elif isinstance(img_suffix, (list, tuple)):
             img_pattern_str = r'\.(%s)$' % '|'.join(img_suffix)
         pattern = re.compile(img_pattern_str)
-        it = soup('img', src=pattern)
+        it = soup('img', src=pattern) + soup('input', src=pattern, type='image')
         if it:
             attr = 'src'
         else:
             attr = 'data-src'
-            it = soup('img', {attr:pattern})
+            it = soup('img', {attr:pattern}) + soup('input', {attr:pattern, 'type':'image'})
         for img in it:
             res = download(img[attr], logfile=logfile)
             if res == (False, 'Existed'):
@@ -495,13 +497,15 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
                 title = unicode(soup_subject.title.string)
             except AttributeError, e:
                 logfile.write('Error: get content\'s title failed\n')
-            if page_pattern.match(title):
+            if num_jpg < 0 or page_pattern.match(title):
                 break
             else:
                 with open('dump.html', 'wb') as dump_file:
                     dump_file.write(content)
                 return False, "Check title failed"
     download_img(soup_subject, num_jpg, logfile=logfile)
+    if num_jpg < 0:
+        return True,
     dla_main = soup_subject('a', text=download_pattern)
     dla_all = soup_subject('a', href=download_pattern)
     # soup_subject.h4 is the title too
@@ -540,7 +544,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
     return res_main
 
 
-def crawl_content(content, clf=sys.stdout, max_retry=12):
+def crawl_content(content, target='seed', clf=sys.stdout, max_retry=12):
     '''Crawl a forum page with its (content, crawl_date),
     clf for common log of all'''
     if isinstance(content, (list, tuple)) and len(content) > 1:
@@ -560,11 +564,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
         if sub_url in HasDownloadLog.black_short_url or clf.has_download(sub_url):
             continue
         title_td = a.parent.find_next_sibling('td')
-        test_title = title_td.h3.string
-        if test_title is None:
-            title = u''.join(title_td.h3.strings)
-        else:
-            title = unicode(test_title)
+        title = u''.join((s.strip() for s in title_td.strings))
         encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
         if page_pattern.match(title):
             citime = str(title_td.find_next_sibling('td').div.string.replace(u'×òÌì', yesterday.isoformat()).replace(u'½ñÌì', today.isoformat()))
@@ -577,7 +577,10 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
             logfile.write("%s\n" % citime)
             logfile.write("\n")
             for _ in xrange(max_retry):
-                res_tuple = crawl_subject(sub_url, logfile=logfile)
+                if target == 'seed':
+                    res_tuple = crawl_subject(sub_url, logfile=logfile)
+                elif target == 'pic':
+                    res_tuple = crawl_subject(sub_url, -1, logfile)
                 if res_tuple[0]:
                     clf.add_download(sub_url, now)
                     clf.write([sub_url, encode_title, now])
@@ -601,7 +604,7 @@ def crawl_content(content, clf=sys.stdout, max_retry=12):
     clf.write('\n')
     return True
 
-def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
+def crawl_page(page_id=1, page_cache={}, target='seed', clf=sys.stdout, max_retry=80):
     '''Crawl a forum page with domain + querystr + page_id,
     it will crawl page_id cache content first,
     then crawl page_id current page and cache the page before it,
@@ -610,7 +613,7 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
     today = datetime.datetime.today()
     if page_cache and page_id in page_cache:
         clf.write('\n%s crawl page %d from cache\n' % (today, page_id))
-        crawl_content(page_cache[page_id], clf)  # update the has_download_url
+        crawl_content(page_cache[page_id], target, clf)  # update the has_download_url
         del page_cache[page_id]
     url = "%s%s%d" % (domain, pathquery, page_id)
     for _ in xrange(max_retry):
@@ -625,7 +628,7 @@ def crawl_page(page_id=1, page_cache={}, clf=sys.stdout, max_retry=80):
                 return
             page_cache[page_id-1] = pre_content, datetime.date.today()
         clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
-        if crawl_content((content, today_date), clf):
+        if crawl_content((content, today_date), target, clf):
             break
         else:
             time.sleep(_+0.5)
@@ -634,7 +637,7 @@ def main():
     parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.2')
     parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store[default: E:\crawl]')
-    parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident'], help='Which kind of torrent you will download')
+    parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident', 'p', 'pic'], help='Which kind of torrent you will download')
     parser.add_argument('-r', '--redownload', action='store_false', help='Whether redownload the subject which is failed')
     parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
     parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')
@@ -645,9 +648,14 @@ def main():
     os.chdir(workpath)
     global pathquery
     if arg.which == 'm' or arg.which == 'mosaic':
+        target = 'seed'
         pathquery = pathquery.replace('2', '15')
     elif arg.which == 'o' or arg.which == 'occident':
+        target = 'seed'
         pathquery = pathquery.replace('2', '4')
+    elif arg.which == 'p' or arg.which == 'pic':
+        target = 'pic'
+        pathquery = pathquery.replace('2', '8')
     clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='), ignore_failed=arg.redownload)
     page_range = []
     page_cache = {}
@@ -662,7 +670,7 @@ def main():
         if not arg.nocache:
             page_cache[0] = ''
     for pid in page_range:
-        crawl_page(pid, page_cache, clf)
+        crawl_page(pid, page_cache, target, clf)
     clf.close()
 
 if __name__ == "__main__":

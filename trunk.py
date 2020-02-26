@@ -214,14 +214,15 @@ class HasDownloadLog:
             'Gateway Time-out',
             'Unknown HTTP Error',
             'Open Seed Page Failed',
-            'Origin Error'
+            'Origin Error',
+            'Empty'
             )
     black_error = ('No Valid Tag in center td',
             'Dead download link',
             'Internal Server Error',
             'Not Found')
     black_short_url = set()
-    def __init__(self, filename, succ_prefix='htm_data/', log_sp='--+-+--', has_download_url = {}, ignore_failed=True):
+    def __init__(self, filename, succ_prefix='htm_data/', log_sp='--+-+--', target='seed', has_download_url = {}, ignore_failed=True):
         self.sp = log_sp
         self.hdu = has_download_url
         if os.path.exists(filename):
@@ -269,7 +270,8 @@ class HasDownloadLog:
                         os.chdir(dirname)
                         logfile = open('index.log', 'a')
                         logfile.write('\nRedownload\n')
-                        res = crawl_subject(url, 50 if dir_not_exist else 0, logfile)
+                        res = crawl_subject(url, -1 if target == 'pic'
+                                else (50 if dir_not_exist else 0), logfile)
                         if res[0]:
                             self.hdu[url] = dirname
                             self.write((url, title, dirname))
@@ -333,21 +335,21 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
             img_pattern_str = r'\.(%s)$' % '|'.join(img_suffix)
         pattern = re.compile(img_pattern_str)
         it = soup('img', src=pattern) + soup('input', src=pattern, type='image')
-        if it:
-            attr = 'src'
-        else:
-            attr = 'data-src'
-            it = soup('img', {attr:pattern}) + soup('input', {attr:pattern, 'type':'image'})
-        for img in it:
-            res = download(img[attr], logfile=logfile)
-            if res == (False, 'Existed'):
-                break
-            elif res[0]:
-                print '.',
-                num -= 1
-                if not num:
+        pic_urls = [img['src'] for img in it]
+        attr = 'data-src'
+        it = soup('img', {attr:pattern}) + soup('input', {attr:pattern, 'type':'image'})
+        pic_urls.extend((img[attr] for img in it))
+        cnt = 0
+        for img_url in pic_urls:
+            res = download(img_url, logfile=logfile)
+            if res[0] or res[1] == 'Existed':
+                if res[0]:
+                    print '.',
+                cnt += 1
+                if cnt == num:
                     break
         print
+        return cnt, len(pic_urls)
 
 def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):
     '''download seed from hash page
@@ -503,9 +505,15 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
                 with open('dump.html', 'wb') as dump_file:
                     dump_file.write(content)
                 return False, "Check title failed"
-    download_img(soup_subject, num_jpg, logfile=logfile)
+    dcnt, dtotal = download_img(soup_subject, num_jpg, logfile=logfile)
+    print 'Succuss Rate: %d/%d\n' % (dcnt, dtotal)
     if num_jpg < 0:
-        return True,
+        if dcnt == 0:
+            return False, 'Empty'
+        elif dcnt <= dtotal*2/3:
+            return False, 'LessSucc %d/%d' % (dcnt, dtotal)
+        else:
+            return True,
     dla_main = soup_subject('a', text=download_pattern)
     dla_all = soup_subject('a', href=download_pattern)
     # soup_subject.h4 is the title too
@@ -656,7 +664,7 @@ def main():
     elif arg.which == 'p' or arg.which == 'pic':
         target = 'pic'
         pathquery = pathquery.replace('2', '8')
-    clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='), ignore_failed=arg.redownload)
+    clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='), target=target, ignore_failed=arg.redownload)
     page_range = []
     page_cache = {}
     if len(arg.page) == 2:

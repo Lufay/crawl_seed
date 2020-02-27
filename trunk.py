@@ -327,7 +327,9 @@ def not_refresh(content):
     return True, ''
 
 def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
-    if num != 0:
+    if num == 0:
+        return 0,0
+    else:
         print 'Download img ',
         if isinstance(img_suffix, (str, unicode)):
             img_pattern_str = r'\.%s$' % img_suffix
@@ -506,7 +508,7 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
                     dump_file.write(content)
                 return False, "Check title failed"
     dcnt, dtotal = download_img(soup_subject, num_jpg, logfile=logfile)
-    print 'Succuss Rate: %d/%d\n' % (dcnt, dtotal)
+    print 'Download Image Succuss Rate: %d/%d\n' % (dcnt, dtotal)
     if num_jpg < 0:
         if dcnt == 0:
             return False, 'Empty'
@@ -655,11 +657,10 @@ def main():
         os.makedirs(workpath)
     os.chdir(workpath)
     global pathquery
+    target = 'seed'
     if arg.which == 'm' or arg.which == 'mosaic':
-        target = 'seed'
         pathquery = pathquery.replace('2', '15')
     elif arg.which == 'o' or arg.which == 'occident':
-        target = 'seed'
         pathquery = pathquery.replace('2', '4')
     elif arg.which == 'p' or arg.which == 'pic':
         target = 'pic'

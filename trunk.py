@@ -4,7 +4,9 @@
 import sys, os, time, datetime
 import argparse, random
 import string, re
-import urllib, urllib2, cookielib
+from functools import partial
+import urllib
+
 from bs4 import BeautifulSoup
 try:
     import lxml
@@ -13,13 +15,12 @@ except ImportError:
     html_parser = 'html.parser'
 print 'using parser %s' % html_parser
 
-cj = cookielib.LWPCookieJar()
-cookie_support = urllib2.HTTPCookieProcessor(cj)
-opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
-urllib2.install_opener(opener)
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from lib.file_line import GetFileLine
+from lib.urllib_downloader import open_page, download as download_with_headers
+from lib.link_pool import LinkPool
 
-with open('url') as f:
-    domain = f.readline().strip()
+
 pathquery = 'thread0806.php?fid=2&search=&page='
 header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
         'Connection' : 'keep-alive',
@@ -37,144 +38,15 @@ text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?has
 redire_pattern = re.compile(ur'url=(.*)$')
 filename_pattern = re.compile(ur'filename="(.*)"')
 
-class GetFileLine:
-    def __init__(self, f, line_block=128):
-        '''f must support seek/tell, readlines, iterator'''
-        self.f = f
-        self.lb = line_block
-        self.file_size = os.path.getsize(f.name)
-    def get_first(self, n=1):
-        ori_pos = self.f.tell()
-        self.f.seek(0)
-        lines = []
-        for line in self.f:
-            line = line.strip()
-            if line:
-                lines.append(line)
-                n -= 1
-                if n == 0:
-                    break
-        self.f.seek(ori_pos)
-        return lines
-    def get_last(self, n=1):
-        ori_pos = self.f.tell()
-        lines = []
-        line_size = self.lb
-        while line_size <= self.file_size:
-            self.f.seek(-line_size, 2)
-            rlines = self.f.readlines()[1:]
-            if len(rlines) > n:
-                for line in reversed(rlines):
-                    line = line.strip()
-                    if line:
-                        lines.append(line)
-                        if len(lines) == n:
-                            break
-                else:
-                    lines = []
-                    line_size += self.lb
-                    continue
-                break
-            else:
-                line_size += self.lb
-                continue
-        else:
-            self.f.seek(0)
-            lines = [line.strip() for line in self.f if line.strip()]
-            lines.reverse()
-        self.f.seek(ori_pos)
-        return lines
-    def gen_line(self):
-        ori_pos = self.f.tell()
-        self.f.seek(0)
-        for line in self.f:
-            line = line.strip()
-            if line:
-                yield line
-        self.f.seek(ori_pos)
-    def gen_rline(self):
-        pass
 
-def open_page(url, retry=20):
-    '''Open a page with url, if fail to retry,
-    return:content or None'''
-    if isinstance(url, (str, unicode)):
-        h = header
-    else:
-        h = header.copy()
-        url, h['Referer'] = url
-    req = urllib2.Request(url, headers=h)
-    for _ in xrange(retry):
-        try:
-            print 'Openning URL:'
-            print url
-            res = urllib2.urlopen(req, timeout=15)
-            content = res.read()
-            res.close()
-            print 'Success\n'
-            return content
-        except urllib2.HTTPError, e:
-            print e
-            return e.getcode(), e.reason if e.reason else 'Unknown HTTP Error'
-        except:
-            print "open failed"
-            time.sleep(1.5)
+open_page = partial(open_page, headers=header)
+download = partial(download_with_headers, headers=header)
 
-def download(url, postdata=None, headers=header, filename=None, check=None, logfile=sys.stderr, retry=5):
-    '''Download a resource from url which will be named filename,
-    if fail to retry 10 times, retry failed return False, "Retry Failed"
-    if existed return False, "Existed",
-    if can't find Content-Disposition return False, "Not Found",
-    if check fail return the check function's ret val,
-    success return True, filename.'''
-    if not filename:
-        filename = os.path.basename(url)
-        if os.path.exists(filename):
-            return False, "Existed"
-    try:
-        req = urllib2.Request(url, postdata, headers)
-    except ValueError, e:
-        logfile.write("Exception message: %s\n" % e.message)
-        return False, "Download Request Failed"
-    for _ in xrange(1, retry+1):
-        logfile.write("Download from:\n%s\n" % url.encode('cp1252', errors='ignore'))  #gbk
-        try:
-            res = urllib2.urlopen(req, timeout=30 if filename == 'GENERATE_FROM_RESPONSE' else 10)
-            content = res.read()
-            if check:
-                check_res = check(content)
-                if not check_res[0]:
-                    logfile.write('Checked fail: %s\n' % check_res[1])
-                    logfile.write("Ret code: %d\n" % res.getcode())
-                    logfile.write("URL info:\n%s\n" % res.info())
-                    logfile.write('Content:\n%s\n' % content)
-                    return check_res
-            if filename == 'GENERATE_FROM_RESPONSE':
-                cnt_dp = res.info().get('Content-Disposition')
-                if cnt_dp:
-                    filename = filename_pattern.search(cnt_dp).group(1)
-                else:
-                    logfile.write("Can't find file name!\n")
-                    logfile.write("Ret code: %d\n" % res.getcode())
-                    logfile.write("URL info:\n%s\n" % res.info())
-                    logfile.write("Content:\n%s\n" % content)
-                    return False, "Not Found"
-            logfile.write("Success\n\n")
-            with open(filename, 'wb') as f:
-                f.write(content)
-            res.close()
-            return True, filename
-        except urllib2.HTTPError, e:
-            logfile.write("Exception Reasion: %s\n" % e.reason)
-            logfile.write("Caght a HTTP except!\n\n")
-        except urllib2.URLError, e:
-            logfile.write("Exception: %s\n" % e)
-            logfile.write("Caght a URL except!\n\n")
-        except Exception, e:
-            logfile.write("Exception message: %s\n" % e.message)
-            logfile.write("Caght a unknown except!\n\n")
-        time.sleep(_ * (1 if postdata else 0.3))
-    return False, "Download Retry Failed"
+with open('url') as f:
+    link_pool = LinkPool(f.readlines(),
+            lambda link: 'index.php' in open_page(link))
+    domain = link_pool.get_link()
+    assert domain, 'No Available domain'
 
 def gen_boundary():
     return '----WebKitFormBoundary' + ''.join(random.sample(string.ascii_letters+string.digits, 16))
@@ -408,9 +280,9 @@ def download_seed_by_post(form_tag, soup, hosturl, logfile=sys.stdout, download_
         'Content-Length': len(post_data)
     })
     if download_retry > 0:
-        return download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile, retry=download_retry)
+        return download_with_headers(dwn_url, hd, post_data, check=not_refresh, logfile=logfile, retry=download_retry)
     else:
-        return download(dwn_url, post_data, hd, check=not_refresh, logfile=logfile)
+        return download_with_headers(dwn_url, hd, post_data, check=not_refresh, logfile=logfile)
 
 def download_seed_by_get_v1(form_tag, soup, hosturl, logfile=sys.stdout, download_retry=0):
 #    use html5lib form is not the parent of table

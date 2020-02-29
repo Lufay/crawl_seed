@@ -13,7 +13,6 @@ try:
     html_parser = 'lxml'
 except ImportError:
     html_parser = 'html.parser'
-print 'using parser %s' % html_parser
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from lib.file_line import GetFileLine
@@ -21,16 +20,28 @@ from lib.urllib_downloader import open_page, download as download_with_headers
 from lib.link_pool import LinkPool
 
 
-pathquery = 'thread0806.php?fid=2&search=&page='
-header = { 'User-Agent' : 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
-        'Connection' : 'keep-alive',
-        'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
-        'Accept-Language' : 'zh-CN,zh;q=0.9'
-#        'Accept-Encoding': 'gzip, deflate, sdch',
-#        'Referer' : domain + 'index.php',
-#        'Host' : domain[7:-1],
+pic_mode = ('pic', 'original')
+ori_topic = {
+    'Nomosaic': 2,
+    'Mosaic': 15,
+    'Occident': 4,
+    'Comic': 5,
+    'Indigenous': 25,
+    'cAptions': 26,
+    'Repost': 27,
+    'Pic': 8,
+    'oriGinal': 16
 }
-# header['Cache-Control'] = 'no-cache'
+header = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
+    'Connection' : 'keep-alive',
+    'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
+    'Accept-Language' : 'zh-CN,zh;q=0.9'
+#    'Cache-Control': 'no-cache',
+#    'Accept-Encoding': 'gzip, deflate, sdch',
+#    'Referer' : domain + 'index.php',
+#    'Host' : domain[7:-1],
+}
 
 page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6|.*\u7063\u642d.*\u65b0\u7247\u9996\u53d1')
 download_pattern = re.compile(ur'http://w*[._]*(rmdown|xunfs)[._]*com')
@@ -38,15 +49,26 @@ text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?has
 redire_pattern = re.compile(ur'url=(.*)$')
 filename_pattern = re.compile(ur'filename="(.*)"')
 
-
 open_page = partial(open_page, headers=header)
 download = partial(download_with_headers, headers=header)
 
-with open('url') as f:
-    link_pool = LinkPool(f.readlines(),
-            lambda link: 'index.php' in open_page(link))
-    domain = link_pool.get_link()
-    assert domain, 'No Available domain'
+def load_domain(domain_file):
+    with open(domain_file) as f:
+        link_pool = LinkPool(f.readlines(),
+                lambda link: 'index.php' in open_page(link))
+        return link_pool.get_link()
+
+def load_topic(topic_conf):
+    t = {}
+    for key in topic_conf:
+        newkey = key.lower()
+        val = topic_conf[key]
+        t[newkey] = val
+        for i, c in enumerate(newkey):
+            if c != key[i]:
+                t[c] = val
+                break
+    return t
 
 def gen_boundary():
     return '----WebKitFormBoundary' + ''.join(random.sample(string.ascii_letters+string.digits, 16))
@@ -486,12 +508,17 @@ def crawl_content(content, target='seed', clf=sys.stdout, max_retry=12):
     clf.write('\n')
     return True
 
-def crawl_page(page_id=1, page_cache={}, target='seed', clf=sys.stdout, max_retry=80):
+def crawl_page(page_id=1, page_cache={}, target='nomosaic', clf=sys.stdout, max_retry=80):
     '''Crawl a forum page with domain + querystr + page_id,
     it will crawl page_id cache content first,
     then crawl page_id current page and cache the page before it,
     the real function will call crawl_content to accomplish,
     clf for common log of all'''
+    pathquery = 'thread0806.php?fid=%d&search=&page=' % topic[target]
+    if target in pic_mode:
+        target = 'pic'
+    else:
+        target = 'seed'
     today = datetime.datetime.today()
     if page_cache and page_id in page_cache:
         clf.write('\n%s crawl page %d from cache\n' % (today, page_id))
@@ -519,7 +546,7 @@ def main():
     parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
     parser.add_argument('-v', '--version', action='version', version='%(prog)s 3.2')
     parser.add_argument('-p', '--path', default='E:/crawl', help='The path to store[default: E:\crawl]')
-    parser.add_argument('-w', '--which', choices=['m','mosaic','o','occident', 'p', 'pic'], help='Which kind of torrent you will download')
+    parser.add_argument('-w', '--which', choices=topic.keys(), default='n', help='Which kind of torrent you will download[default: nomosaic]')
     parser.add_argument('-r', '--redownload', action='store_false', help='Whether redownload the subject which is failed')
     parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
     parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')
@@ -528,16 +555,9 @@ def main():
     if not os.path.isdir(workpath):
         os.makedirs(workpath)
     os.chdir(workpath)
-    global pathquery
-    target = 'seed'
-    if arg.which == 'm' or arg.which == 'mosaic':
-        pathquery = pathquery.replace('2', '15')
-    elif arg.which == 'o' or arg.which == 'occident':
-        pathquery = pathquery.replace('2', '4')
-    elif arg.which == 'p' or arg.which == 'pic':
-        target = 'pic'
-        pathquery = pathquery.replace('2', '8')
-    clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='), target=target, ignore_failed=arg.redownload)
+    clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='),
+            target='pic' if arg.which in pic_mode else 'seed',
+            ignore_failed=arg.redownload)
     page_range = []
     page_cache = {}
     if len(arg.page) == 2:
@@ -551,9 +571,13 @@ def main():
         if not arg.nocache:
             page_cache[0] = ''
     for pid in page_range:
-        crawl_page(pid, page_cache, target, clf)
+        crawl_page(pid, page_cache, arg.which, clf)
     clf.close()
 
 if __name__ == "__main__":
+    print 'using parser %s' % html_parser
+    domain = load_domain('url')
+    assert domain, 'No Available domain'
+    topic = load_topic(ori_topic)
     main()
 

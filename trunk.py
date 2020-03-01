@@ -278,7 +278,9 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
         pic_urls.extend((img[attr] for img in it))
         p = Pool()
         if num < 0:
-            res = p.map(download_BufferList, pic_urls)
+            # ^C can't kill multiprocessing
+            #res = p.map(download_BufferList, pic_urls)
+            res = p.map_async(download_BufferList, pic_urls).get(9999)
             cnt = BufferList.check(res)
         else:
             res = BufferList()

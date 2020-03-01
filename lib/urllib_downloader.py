@@ -86,9 +86,13 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
         except urllib2.URLError, e:
             logfile.write("Exception: %s\n" % e)
             logfile.write("Caght a URL except!\n\n")
+        except TypeError, e:
+            logfile.write("TypeError: %s\n\n" % e)
+            break
         except Exception, e:
-            logfile.write("Exception message: %s\n" % e.message)
-            logfile.write("Caght a unknown except!\n\n")
+            logfile.write("Exception message: %s\n" % e)
+            logfile.write("Caght a except of type: %s\n\n" % type(e))
+            break
         time.sleep(_ * (1 if postdata else 0.3))
     return False, "Download Retry Failed"
 

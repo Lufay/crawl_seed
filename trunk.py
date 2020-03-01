@@ -6,6 +6,7 @@ import argparse, random
 import string, re
 from functools import partial
 import urllib
+from multiprocessing import Pool
 
 from bs4 import BeautifulSoup
 try:
@@ -20,7 +21,7 @@ from lib.urllib_downloader import open_page, download as download_with_headers
 from lib.link_pool import LinkPool
 
 
-pic_mode = ('pic', 'original')
+pic_mode = ('p', 'pic', 'g', 'original')
 ori_topic = {
     'Nomosaic': 2,
     'Mosaic': 15,
@@ -220,6 +221,46 @@ def not_refresh(content):
         return False, flag, content
     return True, ''
 
+class Buffer:
+    def __init__(self):
+        self.log_cont = []
+    def write(self, s):
+        self.log_cont.append(s)
+
+class BufferList:
+    def __init__(self):
+        self.t = []
+        self.c = 0
+    def append(self, a):
+        self.t.append(a)
+        res = a[0]
+        if res[0] or res[1] == 'Existed':
+            if res[0]:
+                print '.',
+            self.c += 1
+    @staticmethod
+    def check(ts):
+        cnt_succ = 0
+        cnt_total = 0
+        for res, _ in ts:
+            if res[0]:
+                cnt_succ += 1
+                cnt_total += 1
+            elif res[1] == 'Existed':
+                cnt_total += 1
+        print '.'*cnt_succ
+        return cnt_total
+    @staticmethod
+    def dump_log(ts, logfile):
+        for _, log_cont in ts:
+            logfile.writelines(log_cont)
+
+def download_BufferList(url):
+    '''due to multiprocessing don't support staticmethod'''
+    bf = Buffer()
+    res = download(url, logfile=bf)
+    return res, bf.log_cont
+
 def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
     if num == 0:
         return 0,0
@@ -235,16 +276,23 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
         attr = 'data-src'
         it = soup('img', {attr:pattern}) + soup('input', {attr:pattern, 'type':'image'})
         pic_urls.extend((img[attr] for img in it))
-        cnt = 0
-        for img_url in pic_urls:
-            res = download(img_url, logfile=logfile)
-            if res[0] or res[1] == 'Existed':
-                if res[0]:
-                    print '.',
-                cnt += 1
-                if cnt == num:
-                    break
+        p = Pool()
+        if num < 0:
+            res = p.map(download_BufferList, pic_urls)
+            cnt = BufferList.check(res)
+        else:
+            res = BufferList()
+            for img_url in pic_urls:
+                p.apply_async(download_BufferList, (img_url,),
+                        callback=res.append)
+            while res.c < num and len(res.t) != len(pic_urls):
+                time.sleep(1)
+            p.terminate()
+            p.join()
+            cnt = res.c
+            res = res.t
         print
+        BufferList.dump_log(res, logfile)
         return cnt, len(pic_urls)
 
 def download_seed(url, logfile=sys.stdout, retry=5, open_page_retry=0, download_retry=0):

@@ -6,7 +6,8 @@ import argparse, random
 import string, re
 from functools import partial
 import urllib
-from multiprocessing import Pool
+from multiprocessing import Pool, TimeoutError
+from urlparse import urlparse
 
 from bs4 import BeautifulSoup
 try:
@@ -34,11 +35,11 @@ ori_topic = {
     'oriGinal': 16
 }
 header = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 6.1) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/78.0.3904.108 Safari/537.36',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/80.0.3987.122 Safari/537.36',
     'Connection' : 'keep-alive',
-    'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3',
-    'Accept-Language' : 'zh-CN,zh;q=0.9'
-#    'Cache-Control': 'no-cache',
+    'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
+    'Accept-Language' : 'zh-CN,zh;q=0.9',
+    'Cache-Control': 'max-age=0'
 #    'Accept-Encoding': 'gzip, deflate, sdch',
 #    'Referer' : domain + 'index.php',
 #    'Host' : domain[7:-1],
@@ -48,7 +49,6 @@ page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+
 download_pattern = re.compile(ur'http://w*[._]*(rmdown|xunfs)[._]*com')
 text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?hash=[0-9a-fA-F]+')
 redire_pattern = re.compile(ur'url=(.*)$')
-filename_pattern = re.compile(ur'filename="(.*)"')
 
 open_page = partial(open_page, headers=header)
 download = partial(download_with_headers, headers=header)
@@ -261,26 +261,39 @@ def download_BufferList(url):
     res = download(url, logfile=bf)
     return res, bf.log_cont
 
-def download_img(soup, num, img_suffix=('jpg', 'jpeg'), logfile=sys.stdout):
+def download_img(soup, num, img_suffix=('jpg', 'jpeg', 'gif'), logfile=sys.stdout):
     if num == 0:
         return 0,0
     else:
         print 'Download img ',
         if isinstance(img_suffix, (str, unicode)):
-            img_pattern_str = r'\.%s$' % img_suffix
+            img_suffixs = (img_suffix, img_suffix.upper())
         elif isinstance(img_suffix, (list, tuple)):
-            img_pattern_str = r'\.(%s)$' % '|'.join(img_suffix)
+            img_suffixs = [suffix.upper() for suffix in img_suffix]
+            img_suffixs.extend(img_suffix)
+        img_pattern_str = r'\.(%s)$' % '|'.join(img_suffixs)
         pattern = re.compile(img_pattern_str)
-        it = soup('img', src=pattern) + soup('input', src=pattern, type='image')
+        it = soup('img', src=pattern, border=None) + soup('input', src=pattern, type='image')
         pic_urls = [img['src'] for img in it]
         attr = 'data-src'
+        link_attr = 'data-link'
         it = soup('img', {attr:pattern}) + soup('input', {attr:pattern, 'type':'image'})
-        pic_urls.extend((img[attr] for img in it))
+        pic_urls.extend((img[attr] for img in it
+            if not img.has_attr(link_attr) or
+            urlparse(img[attr]).netloc == urlparse(img[link_attr]).netloc))
         p = Pool()
         if num < 0:
-            # ^C can't kill multiprocessing
-            #res = p.map(download_BufferList, pic_urls)
-            res = p.map_async(download_BufferList, pic_urls).get(9999)
+            res = []
+            try:
+                # ^C can't kill multiprocessing
+                #res = p.map(download_BufferList, pic_urls)
+                res = p.map_async(download_BufferList, pic_urls).get(900)
+            except TimeoutError, e:
+                print "map_async download timeout!"
+            finally:
+                #p.close()
+                p.terminate()
+                p.join()
             cnt = BufferList.check(res)
         else:
             res = BufferList()
@@ -347,7 +360,6 @@ def download_seed_by_post(form_tag, soup, hosturl, logfile=sys.stdout, download_
     post_data = fill_in_post_data(boundary, form_data)
     hd = header.copy()
     hd.update({
-        'Cache-Control': 'max-age=0',
         'Content-Type': 'multipart/form-data; boundary=%s' % boundary,
         'Content-Length': len(post_data)
     })
@@ -508,8 +520,10 @@ def crawl_content(content, target='seed', clf=sys.stdout, max_retry=12):
     if not content:
         clf.write('Error: crawl None content!!\n')
         return False
+    uc = content.decode('gbk')   #gb2312
+    content = uc.replace(u'<span class="sred">\u71b1</span>', u'.::')
     # install html5lib can avoid &# bug, what's more, from_encoding can be omitted
-    soup = BeautifulSoup(content, html_parser, from_encoding='gbk')   #gb2312
+    soup = BeautifulSoup(content, html_parser)
     # find subjects in the navigation page
     yesterday = today - datetime.date.resolution
     for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):

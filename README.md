@@ -34,3 +34,9 @@ ver3.2(trunk)
 7.增加gen_boundary函数生成form-data的分割字符串
 8.解决Refresh this page的问题（发现并到rmd下载页重试下载）
 9.增加HasDownloadLog加载日志文件时，对下载失败重新下载的功能（读完整个文件，重新下载失败记录）
+
+ACTION:
+1. urllib2 read() hang住的问题：换用requests 实现
+2. download_img map_async timeout 问题，res 为空：加大超时时间，避免超时异常
+3. download_seed 下载非常慢，要120s 以上，考虑做下载池改造
+4. 不用check title 的模式

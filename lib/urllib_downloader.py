@@ -4,12 +4,15 @@ import sys
 import os
 import time
 import urllib2, cookielib
+import re
+import socket
 
 cj = cookielib.LWPCookieJar()
 cookie_support = urllib2.HTTPCookieProcessor(cj)
 opener = urllib2.build_opener(cookie_support, urllib2.HTTPHandler)
 urllib2.install_opener(opener)
 
+filename_pattern = re.compile(ur'filename="(.*)"')
 
 def open_page(url, headers, retry=20):
     '''Open a page with url, if fail to retry,
@@ -55,7 +58,8 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
     for _ in xrange(1, retry+1):
         logfile.write("Download from:\n%s\n" % url.encode('cp1252', errors='ignore'))  #gbk
         try:
-            res = urllib2.urlopen(req, timeout=30 if filename == 'GENERATE_FROM_RESPONSE' else 10)
+            res = urllib2.urlopen(req, timeout=330 if filename == 'GENERATE_FROM_RESPONSE' else 20)
+            # the timeout of urlopen cannot apply to read()
             content = res.read()
             if check:
                 check_res = check(content)
@@ -64,6 +68,7 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
                     logfile.write("Ret code: %d\n" % res.getcode())
                     logfile.write("URL info:\n%s\n" % res.info())
                     logfile.write('Content:\n%s\n' % content)
+                    res.close()
                     return check_res
             if filename == 'GENERATE_FROM_RESPONSE':
                 cnt_dp = res.info().get('Content-Disposition')
@@ -74,6 +79,7 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
                     logfile.write("Ret code: %d\n" % res.getcode())
                     logfile.write("URL info:\n%s\n" % res.info())
                     logfile.write("Content:\n%s\n" % content)
+                    res.close()
                     return False, "Not Found"
             logfile.write("Success\n\n")
             with open(filename, 'wb') as f:
@@ -86,6 +92,8 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
         except urllib2.URLError, e:
             logfile.write("Exception: %s\n" % e)
             logfile.write("Caght a URL except!\n\n")
+        except socket.timeout, e:
+            logfile.write("Connection %s\n\n" % e)
         except TypeError, e:
             logfile.write("TypeError: %s\n\n" % e)
             break
@@ -103,6 +111,7 @@ if __name__ == '__main__':
         'Accept-Language' : 'zh-CN,zh;q=0.9'
         }
     #c = open_page('https://cl.321i.xyz/', header)
-    c = open_page('https://cc.6xm.xyz/', header)
-    if 'index.php' in c:
-        print c
+    #if 'index.php' in c:
+    #    print c
+    res = download('https://www.yuoimg.com/u/20191126/10111254.jpg', headers=header)
+    print res

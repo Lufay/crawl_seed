@@ -58,7 +58,7 @@ def download(url, headers, postdata=None, filename=None, check=None, logfile=sys
     for _ in xrange(1, retry+1):
         logfile.write("Download from:\n%s\n" % url.encode('cp1252', errors='ignore'))  #gbk
         try:
-            res = urllib2.urlopen(req, timeout=330 if filename == 'GENERATE_FROM_RESPONSE' else 20)
+            res = urllib2.urlopen(req, timeout=360 if filename == 'GENERATE_FROM_RESPONSE' else 60)
             # the timeout of urlopen cannot apply to read()
             content = res.read()
             if check:

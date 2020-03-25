@@ -45,7 +45,7 @@ header = {
 #    'Host' : domain[7:-1],
 }
 
-page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6|.*\u7063\u642d.*\u65b0\u7247\u9996\u53d1')
+#page_pattern = re.compile(ur'^(?:[([\u3010][\u4e00-\u9fa5\w/. +-]+[)\]\u3011]?)+|\u25b2\u9b54\u738b\u25b2.*\u5408\u96c6|.*\u7063\u642d.*\u65b0\u7247\u9996\u53d1')
 download_pattern = re.compile(ur'http://w*[._]*(rmdown|xunfs)[._]*com')
 text_download_pattern = re.compile(download_pattern.pattern + ur'/link\.php\?hash=[0-9a-fA-F]+')
 redire_pattern = re.compile(ur'url=(.*)$')
@@ -207,11 +207,12 @@ class HasDownloadLog:
                     return True
 
 def change_sub_url_form(sub_url):
-    '''change htm_data/1903/2/3476625.html to htm_data/2/31903/476625.html
+    '''change htm_data/1903/2/3476625.html to htm_data/2/1903/3476625.html
     '''
     sub_url_seg = sub_url.split('/', 3)
-    sub_url_seg[1], sub_url_seg[2] = sub_url_seg[2], sub_url_seg[1]
-    return '/'.join(sub_url_seg)
+    if len(sub_url_seg) > 3:
+        sub_url_seg[1], sub_url_seg[2] = sub_url_seg[2], sub_url_seg[1]
+        return '/'.join(sub_url_seg)
 
 def not_refresh(content):
     '''A check function,
@@ -261,7 +262,7 @@ def download_BufferList(url):
     res = download(url, logfile=bf)
     return res, bf.log_cont
 
-def download_img(soup, num, img_suffix=('jpg', 'jpeg', 'gif'), logfile=sys.stdout):
+def download_img(soup, num, img_suffix=('jpg', 'jpeg', 'png', 'gif'), logfile=sys.stdout):
     if num == 0:
         return 0,0
     else:
@@ -291,8 +292,8 @@ def download_img(soup, num, img_suffix=('jpg', 'jpeg', 'gif'), logfile=sys.stdou
             except TimeoutError, e:
                 print "map_async download timeout!"
             finally:
-                #p.close()
-                p.terminate()
+                p.close()
+                #p.terminate()
                 p.join()
             cnt = BufferList.check(res)
         else:
@@ -452,17 +453,14 @@ def crawl_subject(short_url, num_jpg=100, logfile=sys.stdout):
             else:
                 return False, 'Refresh short_url failed'
         else:
-            title = u''
             try:
                 title = unicode(soup_subject.title.string)
             except AttributeError, e:
                 logfile.write('Error: get content\'s title failed\n')
-            if num_jpg < 0 or page_pattern.match(title):
-                break
-            else:
                 with open('dump.html', 'wb') as dump_file:
                     dump_file.write(content)
                 return False, "Check title failed"
+            break
     dcnt, dtotal = download_img(soup_subject, num_jpg, logfile=logfile)
     print 'Download Image Succuss Rate: %d/%d\n' % (dcnt, dtotal)
     if num_jpg < 0:
@@ -529,45 +527,44 @@ def crawl_content(content, target='seed', clf=sys.stdout, max_retry=12):
     for a in reversed(soup('a', text=re.compile(ur'\s*\.::\s*'))):
         # the tr contain 5 tds which are a, title, author, num, citime
         sub_url = str(a['href'])
+        sub_url = urlparse(sub_url).path.lstrip('/')
         if sub_url in HasDownloadLog.black_short_url or clf.has_download(sub_url):
             continue
         title_td = a.parent.find_next_sibling('td')
         title = u''.join((s.strip() for s in title_td.strings))
         encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
-        if page_pattern.match(title):
-            citime = str(title_td.find_next_sibling('td').div.string.replace(u'昨天', yesterday.isoformat()).replace(u'今天', today.isoformat()))
-            now = str(time.time())
-            os.mkdir(now)
-            os.chdir(now)
-            logfile = open('index.log', 'w+')
-            logfile.write("%s\n" % sub_url)
-            logfile.write("%s\n" % encode_title)
-            logfile.write("%s\n" % citime)
-            logfile.write("\n")
-            for _ in xrange(max_retry):
-                if target == 'seed':
-                    res_tuple = crawl_subject(sub_url, logfile=logfile)
-                elif target == 'pic':
-                    res_tuple = crawl_subject(sub_url, -1, logfile)
-                if res_tuple[0]:
-                    clf.add_download(sub_url, now)
-                    clf.write([sub_url, encode_title, now])
-                    break
-                elif res_tuple[1] == "Open Page Failed":
-                    time.sleep(_+0.5)
-                else:
-                    clf.write([res_tuple[1], sub_url, encode_title, now])
-                    if res_tuple[1] in HasDownloadLog.black_error:
-                        HasDownloadLog.black_short_url.add(sub_url)
-                    break
+        # if page_pattern.match(title):
+        citime = str(title_td.find_next_sibling('td').div.string.replace(u'昨天', yesterday.isoformat()).replace(u'今天', today.isoformat()))
+        now = str(time.time())
+        os.mkdir(now)
+        os.chdir(now)
+        logfile = open('index.log', 'w+')
+        logfile.write("%s\n" % sub_url)
+        logfile.write("%s\n" % encode_title)
+        logfile.write("%s\n" % citime)
+        logfile.write("\n")
+        for _ in xrange(max_retry):
+            if target == 'seed':
+                res_tuple = crawl_subject(sub_url, logfile=logfile)
+            elif target == 'pic':
+                res_tuple = crawl_subject(sub_url, -1, logfile)
+            if res_tuple[0]:
+                clf.add_download(sub_url, now)
+                clf.write([sub_url, encode_title, now])
+                break
+            elif res_tuple[1] == "Open Page Failed":
+                time.sleep(_+0.5)
             else:
-                clf.write(["Open Page Failed", sub_url, encode_title, now])
-            clf.write("\n")
-            logfile.close()
-            os.chdir('..')
+                clf.write([res_tuple[1], sub_url, encode_title, now])
+                if res_tuple[1] in HasDownloadLog.black_error:
+                    HasDownloadLog.black_short_url.add(sub_url)
+                break
         else:
-            clf.write(['Fail matched', sub_url, encode_title])
-            clf.write("\n")
+            clf.write(["Open Page Failed", sub_url, encode_title, now])
+        clf.write("\n")
+        logfile.close()
+        os.chdir('..')
+        # endif
         clf.flush()
     clf.write('\n')
     return True
@@ -578,33 +575,34 @@ def crawl_page(page_id=1, page_cache={}, target='nomosaic', clf=sys.stdout, max_
     then crawl page_id current page and cache the page before it,
     the real function will call crawl_content to accomplish,
     clf for common log of all'''
-    pathquery = 'thread0806.php?fid=%d&search=&page=' % topic[target]
-    if target in pic_mode:
-        target = 'pic'
-    else:
-        target = 'seed'
-    today = datetime.datetime.today()
-    if page_cache and page_id in page_cache:
-        clf.write('\n%s crawl page %d from cache\n' % (today, page_id))
-        crawl_content(page_cache[page_id], target, clf)  # update the has_download_url
-        del page_cache[page_id]
-    url = "%s%s%d" % (domain, pathquery, page_id)
-    for _ in xrange(max_retry):
-        content = open_page(url)
-        if isinstance(content, tuple):
-            return
-        today_date = datetime.date.today()
-        if page_cache and page_id != 1:
-            url = "%s%s%d" % (domain, pathquery, page_id-1)
-            pre_content = open_page(url)
+    if 1 <= page_id <= 100:
+        pathquery = 'thread0806.php?fid=%d&search=&page=' % topic[target]
+        if target in pic_mode:
+            target = 'pic'
+        else:
+            target = 'seed'
+        today = datetime.datetime.today()
+        if page_cache and page_id in page_cache:
+            clf.write('\n%s crawl page %d from cache\n' % (today, page_id))
+            crawl_content(page_cache[page_id], target, clf)  # update the has_download_url
+            del page_cache[page_id]
+        url = "%s%s%d" % (domain, pathquery, page_id)
+        for _ in xrange(max_retry):
+            content = open_page(url)
             if isinstance(content, tuple):
                 return
-            page_cache[page_id-1] = pre_content, datetime.date.today()
-        clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
-        if crawl_content((content, today_date), target, clf):
-            break
-        else:
-            time.sleep(_+0.5)
+            today_date = datetime.date.today()
+            if page_cache and page_id != 1:
+                url = "%s%s%d" % (domain, pathquery, page_id-1)
+                pre_content = open_page(url)
+                if isinstance(content, tuple):
+                    return
+                page_cache[page_id-1] = pre_content, datetime.date.today()
+            clf.write('\n%s crawl page %d from latest\n' % (today, page_id))
+            if crawl_content((content, today_date), target, clf):
+                break
+            else:
+                time.sleep(_+0.5)
 
 def main():
     parser = argparse.ArgumentParser(description='This program is used to download torrent by crawling page')
@@ -613,6 +611,7 @@ def main():
     parser.add_argument('-w', '--which', choices=topic.keys(), default='n', help='Which kind of torrent you will download[default: nomosaic]')
     parser.add_argument('-r', '--redownload', action='store_false', help='Whether redownload the subject which is failed')
     parser.add_argument('-n', '--nocache', action='store_false', help='Whether cache the page before the current')
+    parser.add_argument('-f', '--file', action='append', help='firstly download local page file')
     parser.add_argument('page', type=int, choices=xrange(1, 101), metavar='PAGE', nargs='+', help='The range of page or which pages')
     arg = parser.parse_args()
     workpath = arg.path+'/work'
@@ -622,6 +621,11 @@ def main():
     clf = HasDownloadLog('index.log', ('htm_data/', 'read.php?tid='),
             target='pic' if arg.which in pic_mode else 'seed',
             ignore_failed=arg.redownload)
+    if arg.file:
+        for filename in arg.file:
+            with open(filename) as f:
+                c = f.read()
+                crawl_content(c, 'pic' if arg.which in pic_mode else 'seed', clf)
     page_range = []
     page_cache = {}
     if len(arg.page) == 2:

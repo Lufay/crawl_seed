@@ -13,9 +13,12 @@ class LinkPool:
             idx = (self.idx + i) % n
             link = self.links[idx]
             if self.checker:
-                if self.checker(link):
-                    self.idx = idx
-                    return link
+                try:
+                    if self.checker(link):
+                        self.idx = idx
+                        return link
+                except Exception, e:
+                    print e
             else:
                 self.idx = idx
                 return link

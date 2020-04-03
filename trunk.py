@@ -56,7 +56,7 @@ download = partial(download_with_headers, headers=header)
 def load_domain(domain_file):
     with open(domain_file) as f:
         link_pool = LinkPool(f.readlines(),
-                lambda link: 'index.php' in open_page(link))
+                lambda link: 'index.php' in open_page(link, retry=5))
         return link_pool.get_link()
 
 def load_topic(topic_conf):

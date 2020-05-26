@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding: gbk
 
 import sys, os, time, datetime
 import argparse, random
@@ -534,7 +533,7 @@ def crawl_content(content, target='seed', clf=sys.stdout, max_retry=12):
         title = u''.join((s.strip() for s in title_td.strings))
         encode_title = title.encode('gb18030')  #gb18030 is super set of gbk, so that can avoid some encode error
         # if page_pattern.match(title):
-        citime = str(title_td.find_next_sibling('td').div.string.replace(u'×òÌì', yesterday.isoformat()).replace(u'½ñÌì', today.isoformat()))
+        citime = str(title_td.find_next_sibling('td').div.string.replace(u'\u6628\u5929', yesterday.isoformat()).replace(u'\u4eca\u5929', today.isoformat()))
         now = str(time.time())
         os.mkdir(now)
         os.chdir(now)
